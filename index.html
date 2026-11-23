@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Anime Guess Who I Am</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Mitr:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="style.css">
+<script src="config.js"></script>
+</head>
+<body>
+<header class="top">
+  <a class="logo" href="#" id="logo"><span class="q">?</span> Anime Guess Who I Am</a>
+  <span id="modeTag" class="mode"></span>
+</header>
+
+<main>
+  <section id="vHome">
+    <div class="hero">
+      <div class="heroTxt">
+        <h1>ตัวละครบนหัวเธอ<br>คือใครกันนะ?</h1>
+        <p>สุ่มตัวละครอนิเมะจาก MyAnimeList ให้ทุกคนแปะบนหัว เห็นของเพื่อนแต่ไม่เห็นของตัวเอง ถามไป เพื่อนชูป้าย ✓ ✗ แล้วเดาให้ถูกก่อนใคร</p>
+        <label class="fld">ชื่อของคุณ
+          <input id="nameIn" maxlength="12" placeholder="เช่น มายด์" autocomplete="off">
+        </label>
+      </div>
+      <div class="heroArt"><img src="img/yes.webp" alt="ชิบิชูป้าย YES"></div>
+    </div>
+
+    <div class="lobby">
+      <div class="lobbyHead">
+        <h2>ห้องที่เปิดอยู่</h2>
+        <button id="createBtn" class="btn primary">+ สร้างห้อง</button>
+      </div>
+      <form id="searchForm" class="searchRow">
+        <input id="search" placeholder="ค้นหาชื่อห้อง หรือพิมพ์โค้ด 6 ตัว" autocomplete="off">
+        <button class="btn">เข้าด้วยโค้ด</button>
+      </form>
+      <div id="roomList" class="roomList"></div>
+    </div>
+  </section>
+
+  <section id="vRoom" hidden>
+    <div class="roomBar">
+      <div class="rbMain">
+        <h2 id="rName"></h2>
+        <div class="rbMeta"><button id="codeChip" class="chip" title="คัดลอกโค้ด"></button><span id="rSet"></span></div>
+      </div>
+      <button id="leaveBtn" class="btn ghost">ออกจากห้อง</button>
+    </div>
+
+    <div id="lobbyPane" class="lobbyPane">
+      <div id="lobbyStage" class="stage small"></div>
+      <div class="lpSide">
+        <h3>ผู้เล่น <span id="pCount"></span></h3>
+        <ul id="pList" class="pList"></ul>
+        <button id="startBtn" class="btn primary big">เริ่มเกม</button>
+        <p id="startNote" class="note"></p>
+      </div>
+    </div>
+
+    <div id="gamePane" class="gamePane" hidden>
+      <div class="playCol">
+        <div id="turnBanner" class="turnBanner"></div>
+        <div id="stage" class="stage"></div>
+        <div class="actions">
+          <div class="reacts">
+            <button class="rx yes" data-rx="yes" aria-label="YES">✓<span>YES</span></button>
+            <button class="rx no" data-rx="no" aria-label="NO">✗<span>NO</span></button>
+            <button class="rx maybe" data-rx="maybe" aria-label="ไม่แน่ใจ">?<span>ไม่แน่ใจ</span></button>
+          </div>
+          <div class="turnBtns">
+            <button id="guessBtn" class="btn primary">ขอเดา</button>
+            <button id="endTurnBtn" class="btn">จบตา</button>
+            <button id="endGameBtn" class="btn ghost" hidden>จบเกม</button>
+          </div>
+        </div>
+      </div>
+      <aside class="chat">
+        <div id="chatLog" class="chatLog" aria-live="polite"></div>
+        <form id="chatForm" class="chatForm">
+          <input id="chatIn" maxlength="120" placeholder="ถามคำถาม เช่น ฉันเป็นผู้หญิงไหม?" autocomplete="off">
+          <button class="btn primary">ส่ง</button>
+        </form>
+      </aside>
+    </div>
+  </section>
+</main>
+
+<dialog id="dlgCreate">
+  <form id="createForm" method="dialog" class="dlg">
+    <h3>สร้างห้อง</h3>
+    <label class="fld">ชื่อห้อง<input id="cName" maxlength="20" required placeholder="แก๊งเมะ ม.5"></label>
+    <fieldset class="seg" id="cVis">
+      <legend>การมองเห็น</legend>
+      <label><input type="radio" name="vis" value="open" checked><span>🔓 เปิด</span></label>
+      <label><input type="radio" name="vis" value="lock"><span>🔒 ปิด (มีรหัส)</span></label>
+      <label><input type="radio" name="vis" value="hidden"><span>ซ่อน (เข้าด้วยโค้ด)</span></label>
+    </fieldset>
+    <label class="fld" id="cPassWrap" hidden>รหัสผ่านห้อง<input id="cPass" maxlength="20" placeholder="อย่าใช้รหัสเดียวกับบัญชีสำคัญ"></label>
+    <fieldset class="seg" id="cRange">
+      <legend>คลังตัวละคร (Top Anime ของ MyAnimeList)</legend>
+      <label><input type="radio" name="rng" value="1-50" checked><span>Top 1–50</span></label>
+      <label><input type="radio" name="rng" value="1-500"><span>Top 1–500</span></label>
+      <label><input type="radio" name="rng" value="1-1000"><span>Top 1–1000</span></label>
+      <label><input type="radio" name="rng" value="custom"><span>กำหนดเอง</span></label>
+    </fieldset>
+    <div class="two" id="cCustom" hidden>
+      <label class="fld">จากอันดับ<input id="cFrom" type="number" min="1" max="5000" value="1"></label>
+      <label class="fld">ถึงอันดับ<input id="cTo" type="number" min="1" max="5000" value="200"></label>
+    </div>
+    <div class="two">
+      <label class="fld">จำนวนคนสูงสุด
+        <select id="cMax"><option>2</option><option>3</option><option>4</option><option selected>6</option><option>8</option></select>
+      </label>
+      <label class="fld">ตัวละคร
+        <select id="cRole"><option value="main">ตัวเอกเท่านั้น</option><option value="all">ตัวเอก + ตัวรอง</option></select>
+      </label>
+    </div>
+    <label class="check"><input type="checkbox" id="cUnique" checked> ห้ามได้ตัวละครเรื่องเดียวกัน</label>
+    <p id="cErr" class="err"></p>
+    <div class="dlgBtns"><button type="button" class="btn ghost" data-close>ยกเลิก</button><button class="btn primary">สร้างห้อง</button></div>
+  </form>
+</dialog>
+
+<dialog id="dlgPass">
+  <form id="passForm" method="dialog" class="dlg">
+    <h3>🔒 ห้องนี้มีรหัส</h3>
+    <label class="fld">รหัสผ่าน<input id="passIn" maxlength="20" autocomplete="off"></label>
+    <p id="passErr" class="err"></p>
+    <div class="dlgBtns"><button type="button" class="btn ghost" data-close>ยกเลิก</button><button class="btn primary">เข้าห้อง</button></div>
+  </form>
+</dialog>
+
+<dialog id="dlgGuess">
+  <form id="guessForm" method="dialog" class="dlg">
+    <h3>ฉันคือ...</h3>
+    <label class="fld">ชื่อตัวละคร (อังกฤษ/โรมาจิ)<input id="guessIn" maxlength="60" autocomplete="off" placeholder="เช่น Gojo Satoru"></label>
+    <div id="sugg" class="sugg"></div>
+    <p class="note">เลือกจากรายชื่อหรือพิมพ์เองก็ได้ สลับชื่อ-นามสกุลหรือพิมพ์ผิดเล็กน้อยได้ เดาผิดจะเสียตา</p>
+    <p id="guessErr" class="err"></p>
+    <div class="dlgBtns"><button type="button" class="btn ghost" data-close>ยกเลิก</button><button class="btn primary">ยืนยันคำตอบ</button></div>
+  </form>
+</dialog>
+
+<dialog id="dlgResult">
+  <div class="dlg wide">
+    <h3>สรุปผล</h3>
+    <ol id="resultList" class="resultList"></ol>
+    <div class="dlgBtns"><button id="againBtn" class="btn primary">เล่นอีกรอบ</button><button type="button" class="btn ghost" data-close>ดูโต๊ะต่อ</button></div>
+  </div>
+</dialog>
+
+<div id="toast" class="toast" role="status"></div>
+<script type="module" src="js/app.js"></script>
+</body>
+</html>
