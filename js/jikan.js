@@ -47,7 +47,7 @@ async function castOf(animeId, mainOnly) {
   return cast;
 }
 
-// opts: {from, to, mainOnly, uniqueAnime}
+// opts: {from, to, mainOnly}. Characters never repeat; several may come from the same anime.
 export async function rollCharacters(n, opts, onProgress) {
   const usedAnime = new Set(), usedChar = new Set(), out = [];
   let tries = 0;

@@ -22,7 +22,7 @@
         <h1>ตัวละครบนหัวเธอ<br>คือใครกันนะ?</h1>
         <p>สุ่มตัวละครอนิเมะจาก MyAnimeList ให้ทุกคนแปะบนหัว เห็นของเพื่อนแต่ไม่เห็นของตัวเอง ถามไป เพื่อนชูป้าย ✓ ✗ แล้วเดาให้ถูกก่อนใคร</p>
         <label class="fld">ชื่อของคุณ
-          <input id="nameIn" maxlength="12" placeholder="เช่น มายด์" autocomplete="off">
+          <input id="nameIn" maxlength="12" placeholder="นิรนาม" autocomplete="off">
         </label>
       </div>
       <div class="heroArt"><img src="img/yes.webp" alt="ชิบิชูป้าย YES"></div>
@@ -91,7 +91,7 @@
 <dialog id="dlgCreate">
   <form id="createForm" method="dialog" class="dlg">
     <h3>สร้างห้อง</h3>
-    <label class="fld">ชื่อห้อง<input id="cName" maxlength="20" required placeholder="แก๊งเมะ ม.5"></label>
+    <label class="fld">ชื่อห้อง<input id="cName" maxlength="20" required placeholder="ตั้งชื่อห้องของคุณ"></label>
     <fieldset class="seg" id="cVis">
       <legend>การมองเห็น</legend>
       <label><input type="radio" name="vis" value="open" checked><span>🔓 เปิด</span></label>
@@ -118,7 +118,6 @@
         <select id="cRole"><option value="main">ตัวเอกเท่านั้น</option><option value="all">ตัวเอก + ตัวรอง</option></select>
       </label>
     </div>
-    <label class="check"><input type="checkbox" id="cUnique" checked> ห้ามได้ตัวละครเรื่องเดียวกัน</label>
     <p id="cErr" class="err"></p>
     <div class="dlgBtns"><button type="button" class="btn ghost" data-close>ยกเลิก</button><button class="btn primary">สร้างห้อง</button></div>
   </form>

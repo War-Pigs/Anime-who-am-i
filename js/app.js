@@ -89,7 +89,7 @@ cf.addEventListener('submit', async e => {
   let code;
   for (let i = 0; i < 6; i++) { code = Array.from({ length: 6 }, () => A[Math.floor(Math.random() * A.length)]).join(''); if (!(await net.get(`rooms/${code}/info`))) break; }
   const info = { name, nameLower: name.toLowerCase(), hidden: vis === 'hidden', passHash: vis === 'lock' ? await hash(code + pass) : '',
-    from, to, mainOnly: $('#cRole').value === 'main', uniqueAnime: $('#cUnique').checked, max: +$('#cMax').value, host: pid, status: 'lobby', created: Date.now() };
+    from, to, mainOnly: $('#cRole').value === 'main', max: +$('#cMax').value, host: pid, status: 'lobby', created: Date.now() };
   await net.set(`rooms/${code}/info`, info);
   $('#dlgCreate').close();
   joinRoom(code, true);
@@ -210,7 +210,7 @@ function onState() {
   hostDuties();
   $('#rName').textContent = info.name;
   $('#codeChip').textContent = st.code;
-  $('#rSet').textContent = `${info.passHash ? '🔒 ห้องปิด' : info.hidden ? 'ห้องซ่อน' : '🔓 ห้องเปิด'} · ${rangeText(info)} · ${info.mainOnly ? 'ตัวเอกเท่านั้น' : 'ตัวเอก + ตัวรอง'}${info.uniqueAnime ? ' · ไม่ซ้ำเรื่อง' : ''}`;
+  $('#rSet').textContent = `${info.passHash ? '🔒 ห้องปิด' : info.hidden ? 'ห้องซ่อน' : '🔓 ห้องเปิด'} · ${rangeText(info)} · ${info.mainOnly ? 'ตัวเอกเท่านั้น' : 'ตัวเอก + ตัวรอง'}`;
   const lobby = info.status === 'lobby';
   $('#lobbyPane').hidden = !lobby; $('#gamePane').hidden = lobby;
   if (lobby) renderLobby(); else renderGame();
@@ -369,7 +369,7 @@ $('#startBtn').addEventListener('click', async () => {
   for (const k of Object.keys(st.players)) Object.assign(reset, { [`players/${k}/char`]: null, [`players/${k}/solved`]: null, [`players/${k}/place`]: null, [`players/${k}/turns`]: 0, [`players/${k}/rx`]: null });
   await net.update(`rooms/${st.code}`, reset);
   let chars;
-  try { chars = await rollCharacters(ps.length, { from: info.from, to: info.to, mainOnly: info.mainOnly, uniqueAnime: info.uniqueAnime }, i => net.set(R('game/progress'), i)); }
+  try { chars = await rollCharacters(ps.length, { from: info.from, to: info.to, mainOnly: info.mainOnly, uniqueAnime: false }, i => net.set(R('game/progress'), i)); }
   catch (e) { toast(e.message || 'สุ่มไม่สำเร็จ'); await net.update(`rooms/${st.code}`, { 'info/status': 'lobby', game: null }); return; }
   const order = ps.map(([k]) => k).sort(() => Math.random() - 0.5);
   const upd = { 'info/status': 'playing', game: { turn: order[0], order: order.join(','), solved: 0 } };
