@@ -1,10 +1,12 @@
 import { createNet } from './net.js';
-import { loadData, rollCharacters, searchCharacters, isCorrectGuess } from './anime.js';
+import { loadData, poolSize, rollCharacters, searchAnime, animeByIds, searchCharacters, findCharacter, isCorrectGuess } from './anime.js';
+import { t, th, applyI18n, onLang, mountLangButtons } from './i18n.js';
 
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const safeUrl = u => (typeof u === 'string' && u.startsWith('https://') ? u : '');
 const okKey = k => /^[A-Za-z0-9_-]{1,40}$/.test(k);
+const MAX_PICKS = 50;
 // Sprite metrics in original pixels (sprite height 862): card centre x and card bottom y per pose.
 const SP = { idle: { cx: 253, cb: 233 }, yes: { cx: 312, cb: 218 }, no: { cx: 259, cb: 245 } }, SH = 862;
 for (const p in SP) { const i = new Image(); i.src = `img/${p}.webp`; }
@@ -16,12 +18,13 @@ const pid = (() => {
   return p;
 })();
 const st = { code: null, info: null, players: {}, game: null, chat: {}, unsubs: [], seenRx: {}, timers: {}, lastStatus: null,
-  hostIdx: false, idxSig: '', idxAt: 0, offSince: {}, joined: false, leaving: false, chatSeen: null, solvedSeen: {} };
+  hostIdx: false, idxSig: '', idxAt: 0, offSince: {}, joined: false, leaving: false, chatSeen: null, poolKey: '' };
 let roomIndex = {};
 
 /* ---------- helpers ---------- */
 let toastT;
-function toast(m) { const t = $('#toast'); t.textContent = m; t.classList.add('show'); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('show'), 2600); }
+function toast(m) { const el = $('#toast'); el.textContent = m; el.classList.add('show'); clearTimeout(toastT); toastT = setTimeout(() => el.classList.remove('show'), 2800); }
+const errText = e => (e?.code ? t(e.code, e.params) : e?.message || 'Error');
 async function hash(s) {
   if (crypto?.subtle) { const b = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s)); return [...new Uint8Array(b)].map(x => x.toString(16).padStart(2, '0')).join(''); }
   let h = 5381; for (const c of s) h = ((h << 5) + h + c.codePointAt(0)) | 0; return 'h' + (h >>> 0).toString(16);
@@ -32,13 +35,16 @@ const online = () => Object.entries(st.players).filter(([k, p]) => okKey(k) && p
 const myName = () => st.players[pid]?.name || $('#nameIn').value.trim();
 function requireName() {
   const n = $('#nameIn').value.trim().slice(0, 12);
-  if (!n) { toast('ใส่ชื่อของคุณก่อนนะ'); $('#nameIn').focus(); return null; }
+  if (!n) { toast(t('needName')); $('#nameIn').focus(); return null; }
   try { localStorage.setItem('agw-name', n); } catch {}
   return n;
 }
 const say = (type, extra = {}) => net.push(R('chat'), { pid, name: myName(), type, ts: Date.now(), ...extra });
-const sys = text => net.push(R('chat'), { type: 'sys', text, ts: Date.now() });
-const rangeText = i => `Top ${i.from}–${i.to}`;
+// System lines are stored as a key + params so each viewer reads them in their own language.
+const sys = (k, p = {}) => net.push(R('chat'), { type: 'sys', k, p, ts: Date.now() });
+const picksOf = i => (i?.mode === 'pick' && i.picks ? String(i.picks).split(',').filter(Boolean) : []);
+const optsOf = i => ({ from: +i.from || 1, to: +i.to || 50, mainOnly: !!i.mainOnly, picks: picksOf(i) });
+const poolText = i => (i.mode === 'pick' ? t('pickS', { n: i.pickCount ?? picksOf(i).length }) : t('topS', { a: i.from, b: i.to }));
 for (const d of document.querySelectorAll('dialog')) d.addEventListener('click', e => { if (e.target.closest('[data-close]')) d.close(); });
 
 /* ---------- home / lobby list ---------- */
@@ -52,44 +58,117 @@ function renderRooms() {
     const off = r.status !== 'lobby' || r.count >= r.max;
     return `<button class="room${off ? ' off' : ''}" data-code="${esc(c)}" ${off ? 'aria-disabled="true"' : ''}>
       <span class="ico" aria-hidden="true">${r.hasPass ? '🔒' : '🔓'}</span>
-      <span><b>${esc(r.name)}</b><small>${esc(rangeText(r))} · ${r.mainOnly ? 'ตัวเอกเท่านั้น' : 'ตัวเอก + ตัวรอง'} · ${r.status === 'lobby' ? 'รอเริ่ม' : 'กำลังเล่น'}</small></span>
+      <span><b>${esc(r.name)}</b><small>${esc(poolText(r))} · ${t(r.mainOnly ? 'mainOnly' : 'mainAll')} · ${t(r.status === 'lobby' ? 'waiting' : 'playingS')}</small></span>
       <span class="cnt">${+r.count || 0}/${+r.max || 0}</span></button>`;
-  }).join('') : `<div class="empty">${q ? 'ไม่เจอห้องที่ค้นหา ลองพิมพ์โค้ด 6 ตัวแล้วกด "เข้าด้วยโค้ด"' : 'ยังไม่มีห้องเปิดอยู่ สร้างห้องแรกเลย!'}</div>`;
+  }).join('') : `<div class="empty">${esc(t(q ? 'noMatch' : 'noRooms'))}</div>`;
 }
 $('#search').addEventListener('input', renderRooms);
 $('#roomList').addEventListener('click', e => {
   const b = e.target.closest('.room'); if (!b) return;
-  if (b.classList.contains('off')) { toast('ห้องนี้เต็มหรือกำลังเล่นอยู่'); return; }
+  if (b.classList.contains('off')) { toast(t('roomOff')); return; }
   joinRoom(b.dataset.code);
 });
 $('#searchForm').addEventListener('submit', e => {
   e.preventDefault();
   const q = $('#search').value.trim().toUpperCase();
-  if (/^[A-Z0-9]{6}$/.test(q)) joinRoom(q); else toast('พิมพ์โค้ดห้อง 6 ตัว หรือกดเลือกห้องจากรายการ');
+  if (/^[A-Z0-9]{6}$/.test(q)) joinRoom(q); else toast(t('codeHint'));
 });
 
-/* ---------- create ---------- */
+/* ---------- create / room settings dialog ---------- */
 const cf = $('#createForm');
-cf.addEventListener('change', () => {
-  $('#cPassWrap').hidden = cf.vis.value !== 'lock';
+let dlgMode = 'create', pickIds = [], pickT;
+function syncDialog() {
+  $('#cPassWrap').hidden = dlgMode === 'edit' || cf.vis.value !== 'lock';
+  const pick = cf.pmode.value === 'pick';
+  $('#cTopWrap').hidden = pick; $('#cPickWrap').hidden = !pick;
   $('#cCustom').hidden = cf.rng.value !== 'custom';
-});
-$('#createBtn').addEventListener('click', () => { if (!requireName()) return; $('#cErr').textContent = ''; $('#dlgCreate').showModal(); });
-cf.addEventListener('submit', async e => {
-  e.preventDefault();
-  const name = $('#cName').value.trim().slice(0, 20), vis = cf.vis.value, pass = $('#cPass').value;
+  $('#cTitle').textContent = t(dlgMode === 'edit' ? 'settingsTitle' : 'createTitle');
+  $('#cSubmit').textContent = t(dlgMode === 'edit' ? 'save' : 'createBtn');
+  $('#pickChips').dataset.empty = t('pickEmpty');
+  const opts = dialogOpts(), cap = poolSize(opts);
+  $('#pickCount').textContent = t('pickCount', { n: pickIds.length, c: cap ?? '…' });
+  $('#cPoolNote').textContent = cap === null ? '' : cap < 2 ? t('notEnough', { n: 2, c: cap }) : t('poolEnough', { c: Math.min(cap, 8) });
+}
+function dialogOpts() {
   let from = 1, to = 50;
   if (cf.rng.value === 'custom') { from = Math.max(1, +$('#cFrom').value | 0); to = Math.min(5000, +$('#cTo').value | 0); }
   else [from, to] = cf.rng.value.split('-').map(Number);
-  const err = m => { $('#cErr').textContent = m; };
-  if (!name) return err('ตั้งชื่อห้องก่อนนะ');
-  if (vis === 'lock' && !pass) return err('ห้องปิดต้องมีรหัสผ่าน');
-  if (!(to - from >= 9)) return err('ช่วงอันดับต้องห่างกันอย่างน้อย 10 อันดับ');
+  return { from, to, mainOnly: $('#cRole').value === 'main', picks: cf.pmode.value === 'pick' ? pickIds : [] };
+}
+async function renderChips() {
+  const list = await animeByIds(pickIds).catch(() => []);
+  $('#pickChips').innerHTML = list.map(a => `<span class="chipX"><span>${esc(a.title)}</span><button type="button" data-unpick="${esc(a.id)}" aria-label="${esc(t('pickRemove', { t: a.title }))}">✕</button></span>`).join('');
+  syncDialog();
+}
+async function renderPickList() {
+  const q = $('#pickSearch').value.trim();
+  let list;
+  try { list = await searchAnime(q); } catch (e) { $('#pickList').innerHTML = `<p class="note">${esc(errText(e))}</p>`; return; }
+  if ($('#pickSearch').value.trim() !== q) return;
+  const on = new Set(pickIds.map(String));
+  $('#pickList').innerHTML = list.length ? list.map(a => `<button type="button" data-pick="${esc(a.id)}" class="${on.has(String(a.id)) ? 'on' : ''}">${safeUrl(a.img) ? `<img src="${esc(safeUrl(a.img))}" alt="">` : ''}<span>${esc(a.title)}<small>${esc(t('pickMeta', { rank: a.rank, m: a.main, a: a.all }))}${a.romaji ? ' · ' + esc(a.romaji) : ''}</small></span></button>`).join('')
+    : `<p class="note">${esc(t('pickNone'))}</p>`;
+}
+$('#pickSearch').addEventListener('input', () => { clearTimeout(pickT); pickT = setTimeout(renderPickList, 120); });
+$('#pickList').addEventListener('click', e => {
+  const b = e.target.closest('[data-pick]'); if (!b) return;
+  const id = b.dataset.pick, i = pickIds.indexOf(id);
+  if (i >= 0) pickIds.splice(i, 1);
+  else if (pickIds.length >= MAX_PICKS) { toast(t('pickMax')); return; }
+  else pickIds.push(id);
+  b.classList.toggle('on', i < 0);
+  renderChips();
+});
+$('#pickChips').addEventListener('click', e => {
+  const b = e.target.closest('[data-unpick]'); if (!b) return;
+  pickIds = pickIds.filter(x => x !== b.dataset.unpick);
+  renderChips(); renderPickList();
+});
+$('#pickClear').addEventListener('click', () => { pickIds = []; renderChips(); renderPickList(); });
+cf.addEventListener('change', syncDialog);
+cf.addEventListener('input', e => { if (e.target.matches('#cFrom,#cTo')) syncDialog(); });
+
+function openDialog(mode) {
+  dlgMode = mode; $('#cErr').textContent = '';
+  $('#cRoomOnly').hidden = mode === 'edit';
+  const i = mode === 'edit' ? st.info : null;
+  if (i) {
+    cf.pmode.value = i.mode === 'pick' ? 'pick' : 'top';
+    const preset = ['1-50', '1-500', '1-1000'].includes(`${i.from}-${i.to}`) ? `${i.from}-${i.to}` : 'custom';
+    cf.rng.value = preset; $('#cFrom').value = i.from; $('#cTo').value = i.to;
+    $('#cMax').value = String(i.max); $('#cRole').value = i.mainOnly ? 'main' : 'all';
+    pickIds = picksOf(i);
+  }
+  $('#pickSearch').value = '';
+  syncDialog(); renderChips(); renderPickList();
+  $('#dlgCreate').showModal();
+}
+$('#createBtn').addEventListener('click', () => { if (requireName()) openDialog('create'); });
+$('#settingsBtn').addEventListener('click', () => { if (amHost() && st.info?.status === 'lobby') openDialog('edit'); });
+
+cf.addEventListener('submit', async e => {
+  e.preventDefault();
+  const err = k => { $('#cErr').textContent = t(k); };
+  const o = dialogOpts(), pick = cf.pmode.value === 'pick';
+  if (pick && !pickIds.length) return err('errPick');
+  if (!pick && !(o.to - o.from >= 9)) return err('errRange');
+  const pool = { mode: pick ? 'pick' : 'top', from: o.from, to: o.to, picks: pick ? pickIds.join(',') : '', pickCount: pick ? pickIds.length : 0,
+    mainOnly: o.mainOnly, max: +$('#cMax').value };
+  if (dlgMode === 'edit') {
+    if (!amHost() || st.info?.status !== 'lobby') return $('#dlgCreate').close();
+    pool.max = Math.max(pool.max, online().length);
+    await net.update(R('info'), pool);
+    $('#dlgCreate').close(); toast(t('saved')); sys('sSettings');
+    return;
+  }
+  const name = $('#cName').value.trim().slice(0, 20), vis = cf.vis.value, pass = $('#cPass').value;
+  if (!name) return err('errRoomName');
+  if (vis === 'lock' && !pass) return err('errPass');
   const A = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
   let code;
   for (let i = 0; i < 6; i++) { code = Array.from({ length: 6 }, () => A[Math.floor(Math.random() * A.length)]).join(''); if (!(await net.get(`rooms/${code}/info`))) break; }
   const info = { name, nameLower: name.toLowerCase(), hidden: vis === 'hidden', passHash: vis === 'lock' ? await hash(code + pass) : '',
-    from, to, mainOnly: $('#cRole').value === 'main', max: +$('#cMax').value, host: pid, status: 'lobby', created: Date.now() };
+    ...pool, host: pid, status: 'lobby', created: Date.now() };
   await net.set(`rooms/${code}/info`, info);
   $('#dlgCreate').close();
   joinRoom(code, true);
@@ -101,7 +180,7 @@ function askPass(code, want) {
     const d = $('#dlgPass'), f = $('#passForm');
     $('#passIn').value = ''; $('#passErr').textContent = '';
     const done = v => { f.onsubmit = null; d.onclose = null; if (d.open) d.close(); res(v); };
-    f.onsubmit = async e => { e.preventDefault(); if ((await hash(code + $('#passIn').value)) === want) done(true); else $('#passErr').textContent = 'รหัสไม่ถูกต้อง'; };
+    f.onsubmit = async e => { e.preventDefault(); if ((await hash(code + $('#passIn').value)) === want) done(true); else $('#passErr').textContent = t('wrongPass'); };
     d.onclose = () => done(false);
     d.showModal();
   });
@@ -109,14 +188,14 @@ function askPass(code, want) {
 async function joinRoom(code, created = false) {
   const name = requireName(); if (!name) return;
   const info = await net.get(`rooms/${code}/info`);
-  if (!info) return toast('ไม่พบห้องนี้ เช็กโค้ดอีกทีนะ');
+  if (!info) return toast(t('notFound'));
   const players = (await net.get(`rooms/${code}/players`)) || {};
   const mine = players[pid];
   const others = Object.entries(players).filter(([k, p]) => k !== pid && p && p.online !== false);
   if (!created && !mine) {
-    if (!others.length) return toast('ห้องนี้ไม่มีคนอยู่แล้ว');
-    if (info.status !== 'lobby') return toast('ห้องนี้กำลังเล่นอยู่ รอรอบหน้านะ');
-    if (others.length >= info.max) return toast('ห้องเต็มแล้ว');
+    if (!others.length) return toast(t('noOne'));
+    if (info.status !== 'lobby') return toast(t('isPlaying'));
+    if (others.length >= info.max) return toast(t('isFull'));
     if (info.passHash && !(await askPass(code, info.passHash))) return;
   }
   const taken = new Set(Object.entries(players).filter(([k]) => k !== pid).map(([, p]) => p?.name));
@@ -124,18 +203,18 @@ async function joinRoom(code, created = false) {
   await net.update(`rooms/${code}/players/${pid}`, { name: nm, online: true, joinedAt: mine?.joinedAt || Date.now() });
   net.onDisconnect(`rooms/${code}/players/${pid}/online`, false);
   enter(code);
-  if (!mine) sys(`${nm} เข้าห้องมาแล้ว`);
+  if (!mine) sys('sJoined', { name: nm });
 }
 function enter(code) {
-  Object.assign(st, { code, info: null, players: {}, game: null, chat: {}, seenRx: {}, rxReady: false, lastStatus: null, hostIdx: false, idxSig: '', offSince: {}, joined: false, leaving: false, chatSeen: null, solvedSeen: {} });
+  Object.assign(st, { code, info: null, players: {}, game: null, chat: {}, seenRx: {}, rxReady: false, lastStatus: null, hostIdx: false, idxSig: '', offSince: {}, joined: false, leaving: false, chatSeen: null, poolKey: '' });
   $('#vHome').hidden = true; $('#vRoom').hidden = false;
   history.replaceState(null, '', '#' + code);
   $('#stage').innerHTML = ''; $('#lobbyStage').innerHTML = ''; $('#chatLog').innerHTML = '';
   st.unsubs = [
-    net.on(R('info'), v => { if (!v) return leaveLocal('ห้องถูกปิดแล้ว'); st.info = v; onState(); }),
+    net.on(R('info'), v => { if (!v) return leaveLocal(t('closed')); st.info = v; onState(); }),
     net.on(R('players'), v => {
       st.players = v || {};
-      if (st.players[pid]) st.joined = true; else if (st.joined && !st.leaving) return leaveLocal('คุณถูกเชิญออกจากห้อง');
+      if (st.players[pid]) st.joined = true; else if (st.joined && !st.leaving) return leaveLocal(t('kicked'));
       onState();
     }),
     net.on(R('game'), v => { st.game = v; onState(); }),
@@ -161,14 +240,14 @@ $('#leaveBtn').addEventListener('click', async () => {
   else {
     if (st.info.status === 'playing' && st.game?.turn === pid) await advanceFrom(pid, {}, new Set([pid]));
     if (wasHost) { await net.set(R('info/host'), others[0][0]); await net.remove(`roomIndex/${code}`); }
-    await sys(`${name} ออกจากห้อง`);
+    await sys('sLeft', { name });
     await net.remove(R(`players/${pid}`));
   }
   leaveLocal();
 });
 $('#codeChip').addEventListener('click', async () => {
   const link = location.origin + location.pathname + '#' + st.code;
-  try { await navigator.clipboard.writeText(link); toast('คัดลอกลิงก์ห้องแล้ว ส่งให้เพื่อนได้เลย'); } catch { toast('โค้ดห้อง: ' + st.code); }
+  try { await navigator.clipboard.writeText(link); toast(t('copied')); } catch { toast(t('codeIs', { code: st.code })); }
 });
 
 /* ---------- host duties ---------- */
@@ -179,7 +258,7 @@ function hostDuties() {
   if (!hostOk) {
     const c = online();
     if (c[0]?.[0] === pid) net.tx(R('info/host'), cur => (cur && P[cur] && P[cur].online !== false ? undefined : pid))
-      .then(v => { if (v === pid) sys(`${myName()} เป็นหัวห้องคนใหม่`); });
+      .then(v => { if (v === pid) sys('sNewHost', { name: myName() }); });
   }
   if (!amHost()) { st.hostIdx = false; return; }
   const now = Date.now();
@@ -195,7 +274,8 @@ function hostDuties() {
 function syncIndex(force) {
   const info = st.info; if (!info || !amHost()) return;
   if (info.hidden) { if (!st.idxSig) { net.remove(`roomIndex/${st.code}`); st.idxSig = 'hidden'; } return; }
-  const entry = { name: info.name, nameLower: info.nameLower, hasPass: !!info.passHash, from: info.from, to: info.to, mainOnly: !!info.mainOnly, max: info.max, status: info.status === 'lobby' ? 'lobby' : 'playing', count: online().length };
+  const entry = { name: info.name, nameLower: info.nameLower, hasPass: !!info.passHash, mode: info.mode || 'top', from: info.from, to: info.to, pickCount: info.pickCount || 0,
+    mainOnly: !!info.mainOnly, max: info.max, status: info.status === 'lobby' ? 'lobby' : 'playing', count: online().length };
   const sig = JSON.stringify(entry);
   if (!force && sig === st.idxSig && Date.now() - st.idxAt < 30000) return;
   st.idxSig = sig; st.idxAt = Date.now();
@@ -210,27 +290,38 @@ function onState() {
   hostDuties();
   $('#rName').textContent = info.name;
   $('#codeChip').textContent = st.code;
-  $('#rSet').textContent = `${info.passHash ? '🔒 ห้องปิด' : info.hidden ? 'ห้องซ่อน' : '🔓 ห้องเปิด'} · ${rangeText(info)} · ${info.mainOnly ? 'ตัวเอกเท่านั้น' : 'ตัวเอก + ตัวรอง'}`;
+  $('#rSet').textContent = `${t(info.passHash ? 'visLockS' : info.hidden ? 'visHiddenS' : 'visOpenS')} · ${poolText(info)} · ${t(info.mainOnly ? 'mainOnly' : 'mainAll')}`;
+  renderPoolBox();
   const lobby = info.status === 'lobby';
   $('#lobbyPane').hidden = !lobby; $('#gamePane').hidden = lobby;
   if (lobby) renderLobby(); else renderGame();
   playReactions();
   if (info.status !== st.lastStatus) {
     if (info.status === 'ended') showResults();
-    if (info.status === 'lobby') $('#dlgResult').open && $('#dlgResult').close();
+    if (info.status === 'lobby' && $('#dlgResult').open) $('#dlgResult').close();
     st.lastStatus = info.status;
   }
+}
+async function renderPoolBox() {
+  const picks = picksOf(st.info), key = picks.join(',');
+  $('#poolBox').hidden = !picks.length;
+  if (!picks.length || key === st.poolKey) { if (picks.length) $('#poolSum').textContent = t('poolTitle', { n: picks.length }); return; }
+  st.poolKey = key;
+  $('#poolSum').textContent = t('poolTitle', { n: picks.length });
+  const list = await animeByIds(picks).catch(() => []);
+  if (st.poolKey === key) $('#poolList').innerHTML = list.map(a => `<li>${esc(a.title)}</li>`).join('');
 }
 function renderLobby() {
   const info = st.info, list = online();
   $('#pCount').textContent = `${list.length}/${info.max}`;
-  $('#pList').innerHTML = list.map(([k, p]) => `<li><span>${k === info.host ? '👑 ' : ''}${esc(p.name)}${k === pid ? ' (คุณ)' : ''}</span>${amHost() && k !== pid ? `<button data-kick="${esc(k)}" aria-label="เชิญ ${esc(p.name)} ออก">เชิญออก</button>` : ''}</li>`).join('');
-  $('#startBtn').hidden = !amHost();
-  $('#startBtn').disabled = list.length < 2;
-  $('#startNote').textContent = amHost() ? (list.length < 2 ? 'รอเพื่อนอีกอย่างน้อย 1 คน กดที่โค้ดห้องเพื่อคัดลอกลิงก์ส่งให้เพื่อน' : 'พร้อมแล้ว กดเริ่มได้เลย!') : 'รอหัวห้องกดเริ่มเกม';
+  $('#pList').innerHTML = list.map(([k, p]) => `<li><span>${k === info.host ? '👑 ' : ''}${esc(p.name)}${k === pid ? ' ' + esc(t('you')) : ''}</span>${amHost() && k !== pid ? `<button data-kick="${esc(k)}" aria-label="${esc(t('kickAria', { name: p.name }))}">${esc(t('kick'))}</button>` : ''}</li>`).join('');
+  const cap = poolSize(optsOf(info)), short = cap !== null && cap < list.length;
+  $('#startBtn').hidden = !amHost(); $('#settingsBtn').hidden = !amHost();
+  $('#startBtn').disabled = list.length < 2 || short;
+  $('#startNote').textContent = short ? t('notEnough', { n: list.length, c: cap }) : amHost() ? t(list.length < 2 ? 'needMore' : 'ready') : t('waitHost');
   renderStage($('#lobbyStage'), list.map(([k, p]) => ({ k, p })), 'lobby');
 }
-$('#pList').addEventListener('click', e => { const b = e.target.closest('[data-kick]'); if (b && amHost()) { const n = st.players[b.dataset.kick]?.name; net.remove(R(`players/${b.dataset.kick}`)); sys(`${n} ถูกเชิญออกจากห้อง`); } });
+$('#pList').addEventListener('click', e => { const b = e.target.closest('[data-kick]'); if (b && amHost()) { const n = st.players[b.dataset.kick]?.name; net.remove(R(`players/${b.dataset.kick}`)); sys('sKicked', { name: n }); } });
 
 function renderGame() {
   const info = st.info, g = st.game || {}, P = st.players, status = info.status;
@@ -240,14 +331,14 @@ function renderGame() {
   const me = P[pid] || {}, myTurn = status === 'playing' && g.turn === pid;
   const tn = P[g.turn]?.name;
   const banner = $('#turnBanner');
-  if (status === 'rolling') banner.textContent = `กำลังแจกการ์ดตัวละคร… ${g.progress || 0}/${g.n || list.length}`;
-  else if (status === 'ended') banner.textContent = 'จบเกมแล้ว! การ์ดทุกใบเปิดหมดแล้ว';
-  else if (myTurn) banner.innerHTML = '<b>ตาของคุณ!</b> ถามลักษณะของตัวเองในแชท แล้วกดจบตาหรือขอเดา';
-  else if (me.solved) banner.innerHTML = `คุณเดาถูกแล้ว! ตอนนี้ตาของ <b>${esc(tn)}</b> ช่วยชูป้ายตอบด้วยนะ`;
-  else banner.innerHTML = tn ? `ตาของ <b>${esc(tn)}</b> ช่วยชูป้าย ✓ ✗ ตอบคำถามด้วยนะ` : '';
+  if (status === 'rolling') banner.textContent = t('dealing', { p: g.progress || 0, n: g.n || list.length });
+  else if (status === 'ended') banner.textContent = t('ended');
+  else if (myTurn) banner.innerHTML = t('myTurn');
+  else if (me.solved) banner.innerHTML = th('solvedWatch', { name: tn }, esc);
+  else banner.innerHTML = tn ? th('otherTurn', { name: tn }, esc) : '';
   $('#guessBtn').disabled = !myTurn || !!me.solved;
   $('#endTurnBtn').disabled = status !== 'playing' || !(myTurn || amHost());
-  $('#endTurnBtn').textContent = myTurn || !amHost() ? 'จบตา' : 'ข้ามตาคนนี้';
+  $('#endTurnBtn').textContent = t(myTurn || !amHost() ? 'endTurn' : 'skipTurn');
   $('#endGameBtn').hidden = !(amHost() && status === 'playing');
   document.querySelectorAll('.rx').forEach(b => { b.disabled = status !== 'playing'; });
 }
@@ -276,7 +367,7 @@ function renderStage(el, list, mode, turn) {
     else { ck = 'c' + c.id; html = safeUrl(c.img) ? `<img src="${esc(safeUrl(c.img))}" alt="${esc(c.name)}" title="${esc(c.name)} · ${esc(c.anime)}">` : `<span>${esc(c.name)}</span>`; }
     const card = slot.querySelector('.card');
     if (slot.dataset.ck !== ck) { const flip = slot.dataset.ck === 'q' && ck.startsWith('c') && k === pid; slot.dataset.ck = ck; card.innerHTML = html; card.classList.remove('flip'); if (flip) { void card.offsetWidth; card.classList.add('flip'); } }
-    slot.querySelector('.tag').textContent = (k === st.info?.host ? '👑 ' : '') + p.name + (k === pid ? ' (คุณ)' : '');
+    slot.querySelector('.tag').textContent = (k === st.info?.host ? '👑 ' : '') + p.name + (k === pid ? ' ' + t('you') : '');
     slot.classList.toggle('me', k === pid);
     slot.classList.toggle('turn', mode === 'playing' && turn === k);
     slot.classList.toggle('solved', !!p.solved);
@@ -305,11 +396,18 @@ function playReactions() {
     clearTimeout(st.timers[k]);
     slot.querySelector('.think')?.remove();
     slot.classList.remove('pop', 'happy', 'sad'); void slot.offsetWidth;
-    const pose = { yes: 'yes', no: 'no', happy: 'yes', sad: 'no' }[rx.t] || 'idle';
-    setPose(slot, pose);
+    setPose(slot, { yes: 'yes', no: 'no', happy: 'yes', sad: 'no' }[rx.t] || 'idle');
     slot.classList.add(rx.t === 'happy' ? 'happy' : rx.t === 'sad' ? 'sad' : 'pop');
-    if (rx.t === 'maybe') { const t = document.createElement('div'); t.className = 'think'; t.textContent = '?'; slot.querySelector('.fig').appendChild(t); }
+    if (rx.t === 'maybe') { const d = document.createElement('div'); d.className = 'think'; d.textContent = '?'; slot.querySelector('.fig').appendChild(d); }
     if (rx.t === 'happy') confetti(slot);
+    slot.querySelector('.gcard')?.remove();
+    if (rx.g && (rx.t === 'happy' || rx.t === 'sad')) {
+      const gc = document.createElement('div'); gc.className = 'gcard' + (rx.t === 'sad' ? ' wrong' : ' right');
+      const u = safeUrl(rx.g.img);
+      gc.innerHTML = `${u ? `<img src="${esc(u)}" alt="">` : '<span class="gq">?</span>'}<b>${esc(rx.g.name)}</b>${rx.t === 'sad' ? '<i aria-hidden="true">✗</i>' : ''}`;
+      slot.querySelector('.fig').appendChild(gc);
+      setTimeout(() => gc.remove(), 4500);
+    }
     st.timers[k] = setTimeout(() => { setPose(slot, 'idle'); slot.classList.remove('pop', 'happy', 'sad'); slot.querySelector('.think')?.remove(); }, 3000);
   }
   if (Object.keys(st.players).length) st.rxReady = true;
@@ -326,11 +424,11 @@ let rsz; addEventListener('resize', () => { clearTimeout(rsz); rsz = setTimeout(
 function renderChat() {
   const log = $('#chatLog'), near = log.scrollHeight - log.scrollTop - log.clientHeight < 60;
   const items = Object.entries(st.chat).filter(([, m]) => m && typeof m === 'object').sort((a, b) => (a[1].ts || 0) - (b[1].ts || 0) || (a[0] < b[0] ? -1 : 1)).slice(-120);
-  const RX = { yes: '<span class="pill yes">✓ YES</span>', no: '<span class="pill no">✗ NO</span>', maybe: '<span class="pill maybe">? ไม่แน่ใจ</span>' };
+  const RX = { yes: `<span class="pill yes">✓ ${esc(t('yes'))}</span>`, no: `<span class="pill no">✗ ${esc(t('no'))}</span>`, maybe: `<span class="pill maybe">? ${esc(t('maybe'))}</span>` };
   log.innerHTML = items.map(([, m]) => {
-    if (m.type === 'sys') return `<div class="msg sys">${esc(m.text)}</div>`;
+    if (m.type === 'sys') return `<div class="msg sys">${esc(m.k ? t(m.k, m.p || {}) : m.text)}</div>`;
     if (RX[m.type]) return `<div class="msg react"><b>${esc(m.name)}</b>${RX[m.type]}</div>`;
-    if (m.type === 'guess') return `<div class="msg guess"><b>${esc(m.name)}</b> เดาว่าเป็น “${esc(m.text)}” ${m.ok ? '<b>ถูกต้อง!</b>' : '— ยังไม่ใช่'}</div>`;
+    if (m.type === 'guess') return `<div class="msg guess${m.ok ? ' ok' : ''}">${safeUrl(m.img) ? `<img src="${esc(safeUrl(m.img))}" alt="">` : ''}<span><b>${esc(m.name)}</b> ${esc(t('guessed'))} <b>${esc(m.text)}</b>${m.ganime ? `<small>${esc(m.ganime)}</small>` : ''}<em>${esc(t(m.ok ? 'correct' : 'wrong'))}</em></span></div>`;
     return `<div class="msg"><b>${esc(m.name)}:</b> ${esc(m.text)}</div>`;
   }).join('');
   if (near || st.chatSeen === null) log.scrollTop = log.scrollHeight;
@@ -348,8 +446,8 @@ function bubble(k, text) {
 }
 $('#chatForm').addEventListener('submit', e => {
   e.preventDefault();
-  const t = $('#chatIn').value.trim().slice(0, 120); if (!t || !st.code) return;
-  $('#chatIn').value = ''; say('msg', { text: t });
+  const v = $('#chatIn').value.trim().slice(0, 120); if (!v || !st.code) return;
+  $('#chatIn').value = ''; say('msg', { text: v });
 });
 let rxAt = 0;
 document.querySelector('.reacts').addEventListener('click', e => {
@@ -364,18 +462,21 @@ $('#startBtn').addEventListener('click', async () => {
   if (!amHost()) return;
   const info = st.info, ps = online();
   if (ps.length < 2) return;
+  try { await loadData(); } catch (e) { return toast(errText(e)); }
+  const cap = poolSize(optsOf(info));
+  if (cap !== null && cap < ps.length) return toast(t('notEnough', { n: ps.length, c: cap }));
   $('#startBtn').disabled = true;
   const reset = { 'info/status': 'rolling', game: { progress: 0, n: ps.length }, chat: null };
   for (const k of Object.keys(st.players)) Object.assign(reset, { [`players/${k}/char`]: null, [`players/${k}/solved`]: null, [`players/${k}/place`]: null, [`players/${k}/turns`]: 0, [`players/${k}/rx`]: null });
   await net.update(`rooms/${st.code}`, reset);
   let chars;
-  try { chars = await rollCharacters(ps.length, { from: info.from, to: info.to, mainOnly: info.mainOnly, uniqueAnime: false }, i => net.set(R('game/progress'), i)); }
-  catch (e) { toast(e.message || 'สุ่มไม่สำเร็จ'); await net.update(`rooms/${st.code}`, { 'info/status': 'lobby', game: null }); return; }
+  try { chars = await rollCharacters(ps.length, optsOf(info), i => net.set(R('game/progress'), i)); }
+  catch (e) { toast(errText(e)); await net.update(`rooms/${st.code}`, { 'info/status': 'lobby', game: null }); return; }
   const order = ps.map(([k]) => k).sort(() => Math.random() - 0.5);
   const upd = { 'info/status': 'playing', game: { turn: order[0], order: order.join(','), solved: 0 } };
   ps.forEach(([k], i) => { upd[`players/${k}/char`] = chars[i]; });
   await net.update(`rooms/${st.code}`, upd);
-  sys(`เริ่มเกม! ตาแรกคือ ${st.players[order[0]]?.name}`);
+  sys('sStart', { name: st.players[order[0]]?.name });
 });
 function nextTurn(from, done = new Set()) {
   const order = (st.game?.order || '').split(','), P = st.players, i = order.indexOf(from);
@@ -390,17 +491,17 @@ async function advanceFrom(cur, upd = {}, done = new Set()) {
   const nx = nextTurn(cur, done);
   if (nx) upd['game/turn'] = nx; else upd['info/status'] = 'ended';
   await net.update(`rooms/${st.code}`, upd);
-  if (nx && nx !== cur) sys(`ตาของ ${st.players[nx]?.name}`);
-  if (!nx) sys('ทุกคนเล่นครบแล้ว จบเกม!');
+  if (nx && nx !== cur) sys('sTurn', { name: st.players[nx]?.name });
+  if (!nx) sys('sAllDone');
 }
 $('#endTurnBtn').addEventListener('click', () => {
   const g = st.game; if (!g || st.info.status !== 'playing') return;
   if (g.turn === pid || amHost()) advanceFrom(g.turn);
 });
-$('#endGameBtn').addEventListener('click', async () => { if (amHost()) { await net.set(R('info/status'), 'ended'); sys('หัวห้องจบเกมแล้ว'); } });
+$('#endGameBtn').addEventListener('click', async () => { if (amHost()) { await net.set(R('info/status'), 'ended'); sys('sHostEnded'); } });
 
 /* guess dialog with instant search over anime.json */
-let guessSel = null, searchT;
+let guessSel = null, searchT, suggs = [];
 $('#guessBtn').addEventListener('click', () => {
   guessSel = null; $('#guessIn').value = ''; $('#sugg').innerHTML = ''; $('#guessErr').textContent = '';
   $('#dlgGuess').showModal(); $('#guessIn').focus();
@@ -413,30 +514,36 @@ $('#guessIn').addEventListener('input', () => {
     try {
       const r = await searchCharacters(q);
       if ($('#guessIn').value.trim() !== q) return;
-      $('#sugg').innerHTML = r.map(c => `<button type="button" data-id="${+c.id}" data-name="${esc(c.name)}">${safeUrl(c.img) ? `<img src="${esc(safeUrl(c.img))}" alt="">` : ''}<span>${esc(c.name)}${c.alt ? `<small>${esc(c.alt)}</small>` : ''}</span></button>`).join('');
-    } catch { $('#sugg').innerHTML = '<p class="note">ค้นหาไม่ได้ตอนนี้ พิมพ์ชื่อเองได้เลย</p>'; }
+      suggs = r;
+      $('#sugg').innerHTML = (r.length ? '' : `<p class="note">${esc(t('notInList'))}</p>`) +
+        r.map(c => `<button type="button" data-id="${+c.id}" data-name="${esc(c.name)}">${safeUrl(c.img) ? `<img src="${esc(safeUrl(c.img))}" alt="">` : ''}<span>${esc(c.name)}${c.alt ? `<small>${esc(c.alt)}</small>` : ''}</span></button>`).join('');
+    } catch { $('#sugg').innerHTML = `<p class="note">${esc(t('searchFail'))}</p>`; }
   }, 150);
 });
 $('#sugg').addEventListener('click', e => {
   const b = e.target.closest('button'); if (!b) return;
-  guessSel = +b.dataset.id; $('#guessIn').value = b.dataset.name;
+  guessSel = suggs.find(c => +c.id === +b.dataset.id) || null; $('#guessIn').value = b.dataset.name;
   $('#sugg').querySelectorAll('button').forEach(x => x.classList.toggle('sel', x === b));
 });
 $('#guessForm').addEventListener('submit', async e => {
   e.preventDefault();
   const text = $('#guessIn').value.trim();
-  if (!text) { $('#guessErr').textContent = 'พิมพ์ชื่อตัวละครก่อนนะ'; return; }
+  if (!text) { $('#guessErr').textContent = t('guessEmpty'); return; }
   const me = st.players[pid], g = st.game;
   if (!me?.char || g?.turn !== pid || st.info.status !== 'playing') { $('#dlgGuess').close(); return; }
   $('#dlgGuess').close();
-  const ok = isCorrectGuess(text, guessSel, me.char);
-  await say('guess', { text: ok ? me.char.name : text, ok });
+  const pick = guessSel && guessSel.name === text ? guessSel : null;
+  const ok = isCorrectGuess(text, pick?.id, me.char);
+  let gx = ok ? { name: me.char.name, img: me.char.img || '', anime: me.char.anime || '' } : pick;
+  if (!gx) { try { gx = await findCharacter(text); } catch {} }
+  gx = gx ? { name: String(gx.name).slice(0, 60), img: safeUrl(gx.img), anime: String(gx.anime || '').slice(0, 80) } : { name: text.slice(0, 60), img: '', anime: '' };
+  await say('guess', { text: gx.name, ok, img: gx.img, ganime: gx.anime });
   if (ok) {
     const place = await net.tx(R('game/solved'), c => (c || 0) + 1);
-    await net.set(R(`players/${pid}/rx`), { t: 'happy', ts: Date.now() });
+    await net.set(R(`players/${pid}/rx`), { t: 'happy', ts: Date.now(), g: gx });
     await advanceFrom(pid, { [`players/${pid}/solved`]: true, [`players/${pid}/place`]: place || 1 }, new Set([pid]));
   } else {
-    await net.set(R(`players/${pid}/rx`), { t: 'sad', ts: Date.now() });
+    await net.set(R(`players/${pid}/rx`), { t: 'sad', ts: Date.now(), g: gx });
     await advanceFrom(pid);
   }
 });
@@ -445,9 +552,9 @@ function showResults() {
   const P = st.players;
   const list = Object.entries(P).filter(([k, p]) => okKey(k) && p?.char)
     .sort((a, b) => (a[1].place || 99) - (b[1].place || 99) || (a[1].turns || 0) - (b[1].turns || 0));
-  $('#resultList').innerHTML = list.map(([k, p]) => `<li><div class="res">${safeUrl(p.char.img) ? `<img src="${esc(safeUrl(p.char.img))}" alt="">` : ''}<div><b>${esc(p.name)}${k === pid ? ' (คุณ)' : ''}</b> คือ <b>${esc(p.char.name)}</b><small>${esc(p.char.anime)} · Top #${+p.char.rank || '?'} · ${p.solved ? `เดาถูกเป็นอันดับ ${+p.place} ใช้ ${+p.turns || 0} ตา` : 'ยังเดาไม่ถูก'}</small></div></div></li>`).join('');
+  $('#resultList').innerHTML = list.map(([k, p]) => `<li><div class="res">${safeUrl(p.char.img) ? `<img src="${esc(safeUrl(p.char.img))}" alt="">` : ''}<div><b>${esc(p.name)}${k === pid ? ' ' + esc(t('you')) : ''}</b> ${esc(t('isChar'))} <b>${esc(p.char.name)}</b><small>${esc(p.char.anime)} · Top #${+p.char.rank || '?'} · ${esc(p.solved ? t('resSolved', { place: +p.place, turns: +p.turns || 0 }) : t('resNot'))}</small></div></div></li>`).join('');
   $('#againBtn').hidden = !amHost();
-  $('#dlgResult').showModal();
+  if (!$('#dlgResult').open) $('#dlgResult').showModal();
 }
 $('#againBtn').addEventListener('click', async () => {
   if (!amHost()) return;
@@ -456,20 +563,33 @@ $('#againBtn').addEventListener('click', async () => {
   await net.update(`rooms/${st.code}`, upd);
 });
 
+/* ---------- language ---------- */
+function setModeTag() {
+  if (!net) return;
+  $('#modeTag').textContent = t(net.mode === 'firebase' ? 'modeOnline' : 'modeLocal');
+  $('#modeTag').title = net.mode === 'firebase' ? '' : t('modeLocalTip');
+}
+onLang(() => {
+  setModeTag(); renderRooms();
+  if (st.code) { st.poolKey = ''; onState(); renderChat(); if ($('#dlgResult').open) showResults(); }
+  if ($('#dlgCreate').open) { syncDialog(); renderChips(); renderPickList(); }
+});
+
 /* ---------- boot ---------- */
 (async () => {
+  mountLangButtons($('#langs'));
+  applyI18n();
   try { $('#nameIn').value = localStorage.getItem('agw-name') || ''; } catch {}
-  loadData().catch(e => toast(e.message));
+  loadData().then(() => { if (st.code) onState(); }).catch(e => toast(errText(e)));
   net = await createNet();
-  $('#modeTag').textContent = net.mode === 'firebase' ? '● ออนไลน์' : 'โหมดทดลอง (ในเครื่องนี้)';
-  if (net.mode !== 'firebase') $('#modeTag').title = 'ยังไม่ได้ตั้งค่า Firebase: เล่นได้เฉพาะหลายแท็บในเบราว์เซอร์เดียวกัน';
+  setModeTag();
   net.on('roomIndex', v => { roomIndex = v || {}; renderRooms(); });
   setInterval(renderRooms, 30000);
   net.onConnected(c => { if (c && st.code && st.players[pid]) { net.set(R(`players/${pid}/online`), true); net.onDisconnect(R(`players/${pid}/online`), false); st.hostIdx = false; syncIndex(true); } });
   const h = location.hash.slice(1).toUpperCase();
   if (/^[A-Z0-9]{6}$/.test(h)) {
     $('#search').value = h; renderRooms();
-    if ($('#nameIn').value.trim()) joinRoom(h); else toast('ใส่ชื่อแล้วกด "เข้าด้วยโค้ด" ได้เลย');
+    if ($('#nameIn').value.trim()) joinRoom(h); else toast(t('hashHint'));
   }
   $('#logo').addEventListener('click', e => { e.preventDefault(); });
 })();

@@ -5,37 +5,40 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Anime Guess Who I Am</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Mitr:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Mitr:wght@400;500;600&family=M+PLUS+Rounded+1c:wght@400;500;700&display=swap">
 <link rel="stylesheet" href="style.css">
 <script src="config.js"></script>
 </head>
 <body>
 <header class="top">
   <a class="logo" href="#" id="logo"><span class="q">?</span> Anime Guess Who I Am</a>
-  <span id="modeTag" class="mode"></span>
+  <div class="topRight">
+    <span id="modeTag" class="mode"></span>
+    <div id="langs" class="langs" role="group" aria-label="Language"></div>
+  </div>
 </header>
 
 <main>
   <section id="vHome">
     <div class="hero">
       <div class="heroTxt">
-        <h1>ตัวละครบนหัวเธอ<br>คือใครกันนะ?</h1>
-        <p>สุ่มตัวละครจากอนิเมะยอดนิยม (ข้อมูลจาก AniList) ให้ทุกคนแปะบนหัว เห็นของเพื่อนแต่ไม่เห็นของตัวเอง ถามไป เพื่อนชูป้าย ✓ ✗ แล้วเดาให้ถูกก่อนใคร</p>
-        <label class="fld">ชื่อของคุณ
-          <input id="nameIn" maxlength="12" placeholder="นิรนาม" autocomplete="off">
+        <h1 data-i18n-html="heroTitle"></h1>
+        <p data-i18n="heroText"></p>
+        <label class="fld"><span data-i18n="yourName"></span>
+          <input id="nameIn" maxlength="12" data-i18n-ph="namePh" autocomplete="off">
         </label>
       </div>
-      <div class="heroArt"><img src="img/yes.webp" alt="ชิบิชูป้าย YES"></div>
+      <div class="heroArt"><img src="img/yes.webp" alt=""></div>
     </div>
 
     <div class="lobby">
       <div class="lobbyHead">
-        <h2>ห้องที่เปิดอยู่</h2>
-        <button id="createBtn" class="btn primary">+ สร้างห้อง</button>
+        <h2 data-i18n="openRooms"></h2>
+        <button id="createBtn" class="btn primary" data-i18n="createRoom"></button>
       </div>
       <form id="searchForm" class="searchRow">
-        <input id="search" placeholder="ค้นหาชื่อห้อง หรือพิมพ์โค้ด 6 ตัว" autocomplete="off">
-        <button class="btn">เข้าด้วยโค้ด</button>
+        <input id="search" data-i18n-ph="searchPh" autocomplete="off">
+        <button class="btn" data-i18n="joinByCode"></button>
       </form>
       <div id="roomList" class="roomList"></div>
     </div>
@@ -45,18 +48,20 @@
     <div class="roomBar">
       <div class="rbMain">
         <h2 id="rName"></h2>
-        <div class="rbMeta"><button id="codeChip" class="chip" title="คัดลอกโค้ด"></button><span id="rSet"></span></div>
+        <div class="rbMeta"><button id="codeChip" class="chip" data-i18n-title="copyCode"></button><span id="rSet"></span></div>
+        <details id="poolBox" class="poolBox" hidden><summary id="poolSum"></summary><ul id="poolList"></ul></details>
       </div>
-      <button id="leaveBtn" class="btn ghost">ออกจากห้อง</button>
+      <button id="leaveBtn" class="btn ghost" data-i18n="leave"></button>
     </div>
 
     <div id="lobbyPane" class="lobbyPane">
       <div id="lobbyStage" class="stage small"></div>
       <div class="lpSide">
-        <h3>ผู้เล่น <span id="pCount"></span></h3>
+        <h3><span data-i18n="players"></span> <span id="pCount"></span></h3>
         <ul id="pList" class="pList"></ul>
-        <button id="startBtn" class="btn primary big">เริ่มเกม</button>
+        <button id="startBtn" class="btn primary big" data-i18n="start"></button>
         <p id="startNote" class="note"></p>
+        <button id="settingsBtn" class="btn ghost wide" data-i18n="settings" hidden></button>
       </div>
     </div>
 
@@ -66,22 +71,22 @@
         <div id="stage" class="stage"></div>
         <div class="actions">
           <div class="reacts">
-            <button class="rx yes" data-rx="yes" aria-label="YES">✓<span>YES</span></button>
-            <button class="rx no" data-rx="no" aria-label="NO">✗<span>NO</span></button>
-            <button class="rx maybe" data-rx="maybe" aria-label="ไม่แน่ใจ">?<span>ไม่แน่ใจ</span></button>
+            <button class="rx yes" data-rx="yes" data-i18n-aria="yes">✓<span data-i18n="yes"></span></button>
+            <button class="rx no" data-rx="no" data-i18n-aria="no">✗<span data-i18n="no"></span></button>
+            <button class="rx maybe" data-rx="maybe" data-i18n-aria="maybe">?<span data-i18n="maybe"></span></button>
           </div>
           <div class="turnBtns">
-            <button id="guessBtn" class="btn primary">ขอเดา</button>
-            <button id="endTurnBtn" class="btn">จบตา</button>
-            <button id="endGameBtn" class="btn ghost" hidden>จบเกม</button>
+            <button id="guessBtn" class="btn primary" data-i18n="guess"></button>
+            <button id="endTurnBtn" class="btn"></button>
+            <button id="endGameBtn" class="btn ghost" data-i18n="endGame" hidden></button>
           </div>
         </div>
       </div>
       <aside class="chat">
         <div id="chatLog" class="chatLog" aria-live="polite"></div>
         <form id="chatForm" class="chatForm">
-          <input id="chatIn" maxlength="120" placeholder="ถามคำถาม เช่น ฉันเป็นผู้หญิงไหม?" autocomplete="off">
-          <button class="btn primary">ส่ง</button>
+          <input id="chatIn" maxlength="120" data-i18n-ph="chatPh" autocomplete="off">
+          <button class="btn primary" data-i18n="send"></button>
         </form>
       </aside>
     </div>
@@ -90,64 +95,79 @@
 
 <dialog id="dlgCreate">
   <form id="createForm" method="dialog" class="dlg">
-    <h3>สร้างห้อง</h3>
-    <label class="fld">ชื่อห้อง<input id="cName" maxlength="20" required placeholder="ตั้งชื่อห้องของคุณ"></label>
-    <fieldset class="seg" id="cVis">
-      <legend>การมองเห็น</legend>
-      <label><input type="radio" name="vis" value="open" checked><span>🔓 เปิด</span></label>
-      <label><input type="radio" name="vis" value="lock"><span>🔒 ปิด (มีรหัส)</span></label>
-      <label><input type="radio" name="vis" value="hidden"><span>ซ่อน (เข้าด้วยโค้ด)</span></label>
+    <h3 id="cTitle"></h3>
+    <div id="cRoomOnly" class="stackGap">
+      <label class="fld"><span data-i18n="roomName"></span><input id="cName" maxlength="20" data-i18n-ph="roomNamePh"></label>
+      <fieldset class="seg">
+        <legend data-i18n="visibility"></legend>
+        <label><input type="radio" name="vis" value="open" checked><span data-i18n="visOpen"></span></label>
+        <label><input type="radio" name="vis" value="lock"><span data-i18n="visLock"></span></label>
+        <label><input type="radio" name="vis" value="hidden"><span data-i18n="visHidden"></span></label>
+      </fieldset>
+      <label class="fld" id="cPassWrap" hidden><span data-i18n="roomPass"></span><input id="cPass" maxlength="20" data-i18n-ph="roomPassPh"></label>
+    </div>
+    <fieldset class="seg">
+      <legend data-i18n="pool"></legend>
+      <label><input type="radio" name="pmode" value="top" checked><span data-i18n="poolTop"></span></label>
+      <label><input type="radio" name="pmode" value="pick"><span data-i18n="poolPick"></span></label>
     </fieldset>
-    <label class="fld" id="cPassWrap" hidden>รหัสผ่านห้อง<input id="cPass" maxlength="20" placeholder="อย่าใช้รหัสเดียวกับบัญชีสำคัญ"></label>
-    <fieldset class="seg" id="cRange">
-      <legend>คลังตัวละคร (อนิเมะยอดนิยมอันดับ…)</legend>
-      <label><input type="radio" name="rng" value="1-50" checked><span>Top 1–50</span></label>
-      <label><input type="radio" name="rng" value="1-500"><span>Top 1–500</span></label>
-      <label><input type="radio" name="rng" value="1-1000"><span>Top 1–1000</span></label>
-      <label><input type="radio" name="rng" value="custom"><span>กำหนดเอง</span></label>
-    </fieldset>
-    <div class="two" id="cCustom" hidden>
-      <label class="fld">จากอันดับ<input id="cFrom" type="number" min="1" max="5000" value="1"></label>
-      <label class="fld">ถึงอันดับ<input id="cTo" type="number" min="1" max="5000" value="200"></label>
+    <div id="cTopWrap" class="stackGap">
+      <fieldset class="seg">
+        <label><input type="radio" name="rng" value="1-50" checked><span>Top 1–50</span></label>
+        <label><input type="radio" name="rng" value="1-500"><span>Top 1–500</span></label>
+        <label><input type="radio" name="rng" value="1-1000"><span>Top 1–1000</span></label>
+        <label><input type="radio" name="rng" value="custom"><span data-i18n="topCustom"></span></label>
+      </fieldset>
+      <div class="two" id="cCustom" hidden>
+        <label class="fld"><span data-i18n="fromRank"></span><input id="cFrom" type="number" min="1" max="5000" value="1"></label>
+        <label class="fld"><span data-i18n="toRank"></span><input id="cTo" type="number" min="1" max="5000" value="200"></label>
+      </div>
+    </div>
+    <div id="cPickWrap" class="pickWrap" hidden>
+      <div class="pickHead"><span id="pickCount"></span><button type="button" id="pickClear" class="linkBtn" data-i18n="pickClear"></button></div>
+      <div id="pickChips" class="chips"></div>
+      <input id="pickSearch" data-i18n-ph="pickSearchPh" autocomplete="off">
+      <div id="pickList" class="pickList"></div>
     </div>
     <div class="two">
-      <label class="fld">จำนวนคนสูงสุด
+      <label class="fld"><span data-i18n="maxPlayers"></span>
         <select id="cMax"><option>2</option><option>3</option><option>4</option><option selected>6</option><option>8</option></select>
       </label>
-      <label class="fld">ตัวละคร
-        <select id="cRole"><option value="main">ตัวเอกเท่านั้น</option><option value="all">ตัวเอก + ตัวรอง</option></select>
+      <label class="fld"><span data-i18n="chars"></span>
+        <select id="cRole"><option value="main" data-i18n="mainOnly"></option><option value="all" data-i18n="mainAll"></option></select>
       </label>
     </div>
+    <p id="cPoolNote" class="note"></p>
     <p id="cErr" class="err"></p>
-    <div class="dlgBtns"><button type="button" class="btn ghost" data-close>ยกเลิก</button><button class="btn primary">สร้างห้อง</button></div>
+    <div class="dlgBtns"><button type="button" class="btn ghost" data-close data-i18n="cancel"></button><button id="cSubmit" class="btn primary"></button></div>
   </form>
 </dialog>
 
 <dialog id="dlgPass">
   <form id="passForm" method="dialog" class="dlg">
-    <h3>🔒 ห้องนี้มีรหัส</h3>
-    <label class="fld">รหัสผ่าน<input id="passIn" maxlength="20" autocomplete="off"></label>
+    <h3 data-i18n="passTitle"></h3>
+    <label class="fld"><span data-i18n="password"></span><input id="passIn" maxlength="20" autocomplete="off"></label>
     <p id="passErr" class="err"></p>
-    <div class="dlgBtns"><button type="button" class="btn ghost" data-close>ยกเลิก</button><button class="btn primary">เข้าห้อง</button></div>
+    <div class="dlgBtns"><button type="button" class="btn ghost" data-close data-i18n="cancel"></button><button class="btn primary" data-i18n="enter"></button></div>
   </form>
 </dialog>
 
 <dialog id="dlgGuess">
   <form id="guessForm" method="dialog" class="dlg">
-    <h3>ฉันคือ...</h3>
-    <label class="fld">ชื่อตัวละคร (พิมพ์อังกฤษ/โรมาจิ แล้วเลือกจากรายชื่อ)<input id="guessIn" maxlength="60" autocomplete="off" placeholder="เช่น Gojo Satoru"></label>
+    <h3 data-i18n="guessTitle"></h3>
+    <label class="fld"><span data-i18n="guessLabel"></span><input id="guessIn" maxlength="60" autocomplete="off" data-i18n-ph="guessPh"></label>
     <div id="sugg" class="sugg"></div>
-    <p class="note">เลือกจากรายชื่อหรือพิมพ์เองก็ได้ สลับชื่อ-นามสกุลหรือพิมพ์ผิดเล็กน้อยได้ เดาผิดจะเสียตา</p>
+    <p class="note" data-i18n="guessNote"></p>
     <p id="guessErr" class="err"></p>
-    <div class="dlgBtns"><button type="button" class="btn ghost" data-close>ยกเลิก</button><button class="btn primary">ยืนยันคำตอบ</button></div>
+    <div class="dlgBtns"><button type="button" class="btn ghost" data-close data-i18n="cancel"></button><button class="btn primary" data-i18n="confirm"></button></div>
   </form>
 </dialog>
 
 <dialog id="dlgResult">
   <div class="dlg wide">
-    <h3>สรุปผล</h3>
+    <h3 data-i18n="results"></h3>
     <ol id="resultList" class="resultList"></ol>
-    <div class="dlgBtns"><button id="againBtn" class="btn primary">เล่นอีกรอบ</button><button type="button" class="btn ghost" data-close>ดูโต๊ะต่อ</button></div>
+    <div class="dlgBtns"><button id="againBtn" class="btn primary" data-i18n="again"></button><button type="button" class="btn ghost" data-close data-i18n="keepViewing"></button></div>
   </div>
 </dialog>
 

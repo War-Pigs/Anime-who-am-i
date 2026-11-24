@@ -105,7 +105,16 @@ input:focus,select:focus{border-color:var(--pink);outline:none}
 #leaveBtn{white-space:nowrap;flex:none}
 .pill{display:inline-block;padding:0 9px;border-radius:999px;font-size:13px;font-weight:600;color:#fff}
 .pill.yes{background:var(--yes)}.pill.no{background:var(--no)}.pill.maybe{background:var(--maybe);color:#3d2a00}
-.msg.guess{background:var(--pink2);border-radius:10px;padding:6px 10px}
+.msg.guess{display:flex;gap:10px;align-items:center;background:var(--pink2);border-radius:12px;padding:6px 10px}
+.msg.guess img{width:38px;height:52px;object-fit:cover;border-radius:6px;border:2px solid var(--ink);flex:none}
+.msg.guess small{display:block;font-size:12px;color:var(--soft)}
+.msg.guess em{display:block;font-style:normal;font-weight:600;color:var(--no)}.msg.guess.ok em{color:var(--yes)}
+.gcard{position:absolute;left:-14%;top:0;z-index:4;width:34%;min-width:64px;background:#fff;border:3px solid #3d2f6b;border-radius:10px;padding:4px;text-align:center;transform:rotate(-6deg);animation:pop .35s;box-shadow:0 4px 0 #0002}
+.gcard img{width:100%;aspect-ratio:3/4;object-fit:cover;border-radius:6px;display:block}
+.gcard .gq{display:grid;place-items:center;aspect-ratio:3/4;font-size:28px;color:#6b4fd0}
+.gcard b{display:block;font-size:11px;line-height:1.2;color:#3d2f6b;font-weight:500;margin-top:3px;overflow-wrap:anywhere}
+.gcard i{position:absolute;inset:0;display:grid;place-items:center;font-style:normal;font-size:56px;color:#e5566b;text-shadow:0 0 0 #fff,2px 2px 0 #fff,-2px -2px 0 #fff}
+.gcard.right{border-color:var(--yes)}
 .chatForm{display:flex;gap:8px;padding:10px;border-top:2px solid var(--line)}.chatForm input{flex:1}
 
 dialog{border:0;border-radius:22px;padding:0;background:var(--panel);color:var(--ink);width:min(520px,calc(100vw - 24px));max-height:calc(100vh - 24px)}
@@ -120,7 +129,7 @@ dialog::backdrop{background:#1b123a99}
 .seg input:focus-visible+span{outline:3px solid var(--grape)}
 .two{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .check{display:flex;gap:8px;align-items:center;font-size:15px}.check input{width:20px;min-height:20px}
-.sugg{display:grid;gap:4px;max-height:240px;overflow-y:auto}
+.sugg{display:grid;gap:4px;max-height:300px;overflow-y:auto}
 .sugg button{display:flex;gap:10px;align-items:center;text-align:left;border:2px solid var(--line);background:var(--bg);border-radius:10px;padding:4px 8px;cursor:pointer;min-height:44px}
 .sugg button.sel{border-color:var(--pink)}
 .sugg img{width:32px;height:44px;object-fit:cover;border-radius:4px}
@@ -137,3 +146,32 @@ dialog::backdrop{background:#1b123a99}
 @media(max-width:600px){.logo{font-size:16px}.hero{grid-template-columns:minmax(0,1fr)}.heroArt img{width:200px}.stage{min-height:280px;padding-top:50px}
   .actions{flex-direction:column;align-items:stretch}.reacts{justify-content:center}.turnBtns{justify-content:center}.roomBar{align-items:flex-start}.two{grid-template-columns:1fr}}
 @media(prefers-reduced-motion:reduce){*,*::before{animation:none!important;transition:none!important}}
+
+/* language switch, room settings, anime picker */
+.topRight{display:flex;align-items:center;gap:12px;flex-wrap:wrap;justify-content:flex-end}
+.langs{display:flex;border:2px solid var(--line);border-radius:12px;overflow:hidden;background:var(--panel)}
+.langs button{border:0;background:none;min-height:36px;padding:2px 10px;font-size:14px;cursor:pointer;color:var(--soft)}
+.langs button[aria-pressed=true]{background:var(--pink);color:#fff;font-weight:500}
+html[lang=ja] body{font-family:"M PLUS Rounded 1c",Mitr,system-ui,sans-serif}
+.stackGap{display:grid;gap:12px}
+.btn.wide{width:100%;margin-top:10px}
+.pickWrap{display:grid;gap:8px;border:2px dashed var(--line);border-radius:14px;padding:10px}
+.pickHead{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:14px;font-weight:500}
+.linkBtn{border:0;background:none;color:var(--pink);cursor:pointer;font-size:14px;min-height:32px;padding:0 4px}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chips:empty::before{content:attr(data-empty);font-size:13px;color:var(--soft)}
+.chipX{display:inline-flex;align-items:center;gap:6px;border:2px solid var(--pink);background:var(--pink2);border-radius:999px;padding:2px 4px 2px 10px;font-size:13px;max-width:100%}
+.chipX span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.chipX button{border:0;background:var(--pink);color:#fff;border-radius:50%;width:22px;height:22px;cursor:pointer;flex:none;line-height:1}
+.pickList{display:grid;gap:4px;max-height:240px;overflow-y:auto}
+.pickList button{display:flex;gap:10px;align-items:center;text-align:left;border:2px solid var(--line);background:var(--bg);border-radius:10px;padding:4px 8px;cursor:pointer;min-height:48px}
+.pickList button.on{border-color:var(--yes);background:light-dark(#e6f7ef,#1d3b2e)}
+.pickList button.on::after{content:"✓";margin-left:auto;color:var(--yes);font-weight:600}
+.pickList img{width:30px;height:42px;object-fit:cover;border-radius:4px;flex:none}
+.pickList small{display:block;color:var(--soft);font-size:12px}
+.poolBox{margin-top:6px;font-size:14px}
+.poolBox summary{cursor:pointer;color:var(--grape);font-weight:500;min-height:32px;display:flex;align-items:center}
+.poolBox ul{margin:6px 0 0;padding:0;list-style:none;display:flex;flex-wrap:wrap;gap:6px}
+.poolBox li{border:2px solid var(--line);border-radius:999px;padding:1px 10px;background:var(--panel)}
+dialog{width:min(560px,calc(100vw - 24px))}
+@media(max-width:600px){.mode{display:none}}
