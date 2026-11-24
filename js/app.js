@@ -1,6 +1,6 @@
-import { createNet } from './net.js';
-import { loadData, poolSize, rollCharacters, searchAnime, animeByIds, searchCharacters, findCharacter, isCorrectGuess } from './anime.js';
-import { t, th, applyI18n, onLang, mountLangButtons } from './i18n.js';
+import { createNet } from './net.js?v=7';
+import { loadData, poolSize, rollCharacters, searchAnime, animeByIds, searchCharacters, findCharacter, isCorrectGuess } from './anime.js?v=7';
+import { t, th, applyI18n, onLang, mountLangButtons } from './i18n.js?v=7';
 
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -246,8 +246,7 @@ $('#leaveBtn').addEventListener('click', async () => {
   leaveLocal();
 });
 $('#codeChip').addEventListener('click', async () => {
-  const link = location.origin + location.pathname + '#' + st.code;
-  try { await navigator.clipboard.writeText(link); toast(t('copied')); } catch { toast(t('codeIs', { code: st.code })); }
+  try { await navigator.clipboard.writeText(st.code); toast(t('copiedCode', { code: st.code })); } catch { toast(t('codeIs', { code: st.code })); }
 });
 
 /* ---------- host duties ---------- */

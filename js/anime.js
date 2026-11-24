@@ -1,6 +1,7 @@
 // Character data comes from anime.json (built once with tools/build-data.html from AniList).
 // No live API calls while playing: rolling and searching are instant.
-// Format: { anime: [ { id, t: title, r?: romaji, c: [ [id, name, img, isMain, [alt names]] ] } ] }, index = popularity rank - 1.
+// Format: { ip?: image url prefix, anime: [ { id, t: title, r?: romaji, c: [ [id, name, img, isMain, [alt names]?] ] } ] }, index = popularity rank - 1.
+// v2 files store img without the common AniList prefix (ip) to stay small; v1 files store full urls.
 // Errors carry .code (eNoData, eBadData, eRange, eRoll) + .params so the UI can translate them.
 const fail = (code, params) => Object.assign(new Error(code), { code, params });
 let dataP = null, data = null;
@@ -10,7 +11,11 @@ export function loadData() {
     return r.json();
   }).then(d => {
     if (!Array.isArray(d?.anime) || !d.anime.length) throw fail('eBadData');
-    d.anime.forEach((a, i) => { a.rank = i + 1; a.id ??= 'r' + (i + 1); });
+    const ip = typeof d.ip === 'string' && d.ip.startsWith('https://') ? d.ip : '';
+    d.anime.forEach((a, i) => {
+      a.rank = i + 1; a.id ??= 'r' + (i + 1);
+      if (ip) for (const c of a.c || []) if (c[2] && !/^https?:/.test(c[2])) c[2] = ip + c[2];
+    });
     return (data = d);
   }).catch(e => { dataP = null; throw e.code ? e : fail('eNoData'); });
   return dataP;

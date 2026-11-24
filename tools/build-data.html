@@ -51,15 +51,19 @@ html[lang=ja] body{font-family:"M PLUS Rounded 1c",Mitr,system-ui,sans-serif}
   </div>
 </main>
 <script type="module">
-import { t, applyI18n, mountLangButtons, onLang } from '../js/i18n.js';
+import { t, applyI18n, mountLangButtons, onLang } from '../js/i18n.js?v=7';
 mountLangButtons(document.querySelector('#langs')); applyI18n();
 let doneMsg = null; document.title = t('b_title');
 onLang(() => { document.title = t('b_title'); if (doneMsg) document.querySelector('#status').innerHTML = `<span class="ok">${t('b_done', doneMsg)}</span>`; });
 {
 const API = 'https://graphql.anilist.co';
-const Q = `query($page:Int,$per:Int,$cper:Int){Page(page:$page,perPage:$per){pageInfo{hasNextPage}
+const CF = `edges{role node{id name{full alternative} image{large}}}`;
+const Q = `query($page:Int,$per:Int){Page(page:$page,perPage:$per){pageInfo{hasNextPage}
  media(type:ANIME,sort:POPULARITY_DESC,isAdult:false){id idMal title{romaji english}
- characters(perPage:$cper,sort:[ROLE,FAVOURITES_DESC]){edges{role node{id name{full alternative} image{large}}}}}}}`;
+ c1:characters(page:1,perPage:25,sort:[ROLE,FAVOURITES_DESC]){${CF}}
+ c2:characters(page:2,perPage:25,sort:[ROLE,FAVOURITES_DESC]){${CF}}}}}`;
+const IP = 'https://s4.anilist.co/file/anilistcdn/character/large/';
+const MAX_CHARS = 50;
 const $ = s => document.querySelector(s);
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const log = (m, cls) => { const d = document.createElement('div'); d.textContent = m; if (cls) d.className = cls; $('#log').prepend(d); };
@@ -92,12 +96,12 @@ $('#go').addEventListener('click', async () => {
   const want = +$('#count').value;
   $('#go').disabled = true; $('#dl').hidden = true; $('#log').textContent = ''; doneMsg = null;
   const anime = [], seenChar = new Set();
-  let page = 1, per = 50, cper = 12, skipped = 0;
+  let page = 1, per = 50, skipped = 0;
   try {
     while (anime.length < want) {
       $('#status').textContent = t('b_page', { p: page, n: anime.length, w: want });
       let P;
-      try { P = await gql({ page, per, cper }); }
+      try { P = await gql({ page, per }); }
       catch (e) {
         if (e.complexity && per > 10) { const first = (page - 1) * per; per = Math.floor(per / 2); page = Math.floor(first / per) + 1; log(t('b_shrink', { n: per })); continue; }
         throw e;
@@ -105,13 +109,19 @@ $('#go').addEventListener('click', async () => {
       for (const m of P.media || []) {
         if (anime.length >= want) break;
         const cast = [];
-        for (const e of m.characters?.edges || []) {
-          const n = e.node; if (!n?.id) continue;
-          const img = n.image?.large || '';
+        const seenHere = new Set();
+        for (const e of [...(m.c1?.edges || []), ...(m.c2?.edges || [])]) {
+          const n = e.node; if (!n?.id || seenHere.has(n.id) || cast.length >= MAX_CHARS) continue;
+          let img = n.image?.large || '';
           if (!img || /default\.jpg/.test(img)) continue;
-          const alt = (n.name?.alternative || []).filter(Boolean).slice(0, 3);
-          cast.push([n.id, n.name?.full || '', img, e.role === 'MAIN' ? 1 : 0, alt]);
+          seenHere.add(n.id);
+          if (img.startsWith(IP)) img = img.slice(IP.length);
+          const alt = (n.name?.alternative || []).filter(Boolean).slice(0, 2);
+          const row = [n.id, n.name?.full || '', img, e.role === 'MAIN' ? 1 : 0];
+          if (alt.length) row.push(alt);
+          cast.push(row);
         }
+        cast.sort((x, y) => y[3] - x[3]);
         const main = cast.filter(c => c[3]);
         if (!main.length) { skipped++; continue; }
         // Skip sequels/spin-offs whose main cast is already in the list (e.g. "Season 2").
@@ -126,7 +136,7 @@ $('#go').addEventListener('click', async () => {
       if (!P.pageInfo?.hasNextPage) break;
       page++;
     }
-    const data = { v: 1, source: 'AniList', sort: 'POPULARITY_DESC', built: new Date().toISOString().slice(0, 10), anime };
+    const data = { v: 2, source: 'AniList', sort: 'POPULARITY_DESC', built: new Date().toISOString().slice(0, 10), ip: IP, anime };
     const blob = new Blob([JSON.stringify(data)], { type: 'application/json' });
     const a = $('#dl'); a.href = URL.createObjectURL(blob); a.download = 'anime.json'; a.hidden = false;
     const chars = anime.reduce((s, a) => s + a.c.length, 0);
