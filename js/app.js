@@ -1,6 +1,6 @@
-import { createNet } from './net.js?v=8';
-import { loadData, poolSize, rollCharacters, searchAnime, animeByIds, searchCharacters, findCharacter, isCorrectGuess } from './anime.js?v=8';
-import { t, th, applyI18n, onLang, mountLangButtons } from './i18n.js?v=8';
+import { createNet } from './net.js?v=9';
+import { loadData, poolSize, rollCharacters, searchAnime, animeByIds, searchCharacters, findCharacter, isCorrectGuess } from './anime.js?v=9';
+import { t, th, applyI18n, onLang, mountLangButtons } from './i18n.js?v=9';
 
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));

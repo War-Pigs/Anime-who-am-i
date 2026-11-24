@@ -51,17 +51,20 @@ html[lang=ja] body{font-family:"M PLUS Rounded 1c",Mitr,system-ui,sans-serif}
   </div>
 </main>
 <script type="module">
-import { t, applyI18n, mountLangButtons, onLang } from '../js/i18n.js?v=8';
+import { t, applyI18n, mountLangButtons, onLang } from '../js/i18n.js?v=9';
 mountLangButtons(document.querySelector('#langs')); applyI18n();
 let doneMsg = null; document.title = t('b_title');
 onLang(() => { document.title = t('b_title'); if (doneMsg) document.querySelector('#status').innerHTML = `<span class="ok">${t('b_done', doneMsg)}</span>`; });
 {
 const API = 'https://graphql.anilist.co';
 const CF = `edges{role node{id name{full alternative} image{large}}}`;
-const Q = `query($page:Int,$per:Int){Page(page:$page,perPage:$per){pageInfo{hasNextPage}
- media(type:ANIME,sort:POPULARITY_DESC,isAdult:false){id idMal title{romaji english}
+// AniList refuses page*perPage beyond 5000, so past that we restart at page 1 with a
+// popularity cursor (popularity_lesser) and keep going: no depth limit, duplicates skipped by id.
+const Q = cursor => `query($page:Int,$per:Int${cursor ? ',$pl:Int' : ''}){Page(page:$page,perPage:$per){pageInfo{hasNextPage}
+ media(type:ANIME,sort:POPULARITY_DESC,isAdult:false${cursor ? ',popularity_lesser:$pl' : ''}){id idMal popularity title{romaji english}
  c1:characters(page:1,perPage:25,sort:[ROLE,FAVOURITES_DESC]){${CF}}
  c2:characters(page:2,perPage:25,sort:[ROLE,FAVOURITES_DESC]){${CF}}}}}`;
+const DEPTH = 5000;
 const IP = 'https://s4.anilist.co/file/anilistcdn/character/large/';
 const MAX_CHARS = 50;
 const $ = s => document.querySelector(s);
@@ -75,7 +78,7 @@ async function gql(vars) {
     last = Date.now();
     let res;
     try {
-      res = await fetch(API, { method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/json' }, body: JSON.stringify({ query: Q, variables: vars }) });
+      res = await fetch(API, { method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/json' }, body: JSON.stringify({ query: Q(vars.pl != null), variables: vars }) });
     } catch (e) { log(t('b_conn')); await sleep(3000 * (attempt + 1)); continue; }
     if (res.status === 429) {
       const ra = +res.headers.get('Retry-After') || 60;
@@ -87,6 +90,8 @@ async function gql(vars) {
     if (j && j.data && j.data.Page) return j.data.Page;
     const msg = j?.errors?.map(e => e.message).join(', ') || ('HTTP ' + res.status);
     if (/complex/i.test(msg)) throw Object.assign(new Error(msg), { complexity: true });
+    if (/depth/i.test(msg)) throw Object.assign(new Error(msg), { depth: true });
+    if (res.status >= 400 && res.status < 500) throw new Error(msg);   // a bad request won't fix itself by retrying
     log(t('b_err', { m: msg })); await sleep(3000 * (attempt + 1));
   }
   throw new Error(t('b_noreply'));
@@ -102,19 +107,31 @@ function offer(anime) {
 $('#go').addEventListener('click', async () => {
   const want = +$('#count').value;
   $('#go').disabled = true; $('#dl').hidden = true; $('#log').textContent = ''; doneMsg = null;
-  const anime = [], seenChar = new Set();
-  let page = 1, per = 50, skipped = 0;
+  const anime = [], seenChar = new Set(), seenAnime = new Set();
+  let page = 1, per = 50, skipped = 0, pl = null, lastPop = null, jumpedAt = null;
+  const jump = () => {   // restart below the last popularity seen
+    if (lastPop == null) throw new Error('page depth');
+    pl = jumpedAt === lastPop ? lastPop : lastPop + 1;   // +1 keeps ties; if stuck on a tie, step past it
+    jumpedAt = lastPop; page = 1;
+    log(t('b_jump', { p: lastPop }));
+  };
   try {
     while (anime.length < want) {
+      if (page * per > DEPTH) jump();
       $('#status').textContent = t('b_page', { p: page, n: anime.length, w: want });
       let P;
-      try { P = await gql({ page, per }); }
+      try { P = await gql(pl == null ? { page, per } : { page, per, pl }); }
       catch (e) {
         if (e.complexity && per > 10) { const first = (page - 1) * per; per = Math.floor(per / 2); page = Math.floor(first / per) + 1; log(t('b_shrink', { n: per })); continue; }
+        if (e.depth) { jump(); continue; }
         throw e;
       }
-      for (const m of P.media || []) {
+      const list = P.media || [];
+      if (list.length) lastPop = list[list.length - 1].popularity ?? lastPop;
+      for (const m of list) {
         if (anime.length >= want) break;
+        if (seenAnime.has(m.id)) continue;
+        seenAnime.add(m.id);
         const cast = [];
         const seenHere = new Set();
         for (const e of [...(m.c1?.edges || []), ...(m.c2?.edges || [])]) {
@@ -135,8 +152,8 @@ $('#go').addEventListener('click', async () => {
         const repeat = main.filter(c => seenChar.has(c[0])).length;
         if (repeat / main.length >= 0.5) { skipped++; continue; }
         cast.forEach(c => seenChar.add(c[0]));
-        const t = m.title?.english || m.title?.romaji || '?', r = m.title?.romaji && m.title.romaji !== t ? m.title.romaji : undefined;
-        anime.push({ id: m.id, mal: m.idMal || null, t, r, c: cast });
+        const title = m.title?.english || m.title?.romaji || '?', r = m.title?.romaji && m.title.romaji !== title ? m.title.romaji : undefined;
+        anime.push({ id: m.id, mal: m.idMal || null, t: title, r, c: cast });
       }
       $('#bar').style.width = Math.round(anime.length / want * 100) + '%';
       log(t('b_log', { p: page, n: anime.length, s: skipped }));
