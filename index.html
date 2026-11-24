@@ -20,7 +20,7 @@
     <div class="hero">
       <div class="heroTxt">
         <h1>ตัวละครบนหัวเธอ<br>คือใครกันนะ?</h1>
-        <p>สุ่มตัวละครอนิเมะจาก MyAnimeList ให้ทุกคนแปะบนหัว เห็นของเพื่อนแต่ไม่เห็นของตัวเอง ถามไป เพื่อนชูป้าย ✓ ✗ แล้วเดาให้ถูกก่อนใคร</p>
+        <p>สุ่มตัวละครจากอนิเมะยอดนิยม (ข้อมูลจาก AniList) ให้ทุกคนแปะบนหัว เห็นของเพื่อนแต่ไม่เห็นของตัวเอง ถามไป เพื่อนชูป้าย ✓ ✗ แล้วเดาให้ถูกก่อนใคร</p>
         <label class="fld">ชื่อของคุณ
           <input id="nameIn" maxlength="12" placeholder="นิรนาม" autocomplete="off">
         </label>
@@ -100,7 +100,7 @@
     </fieldset>
     <label class="fld" id="cPassWrap" hidden>รหัสผ่านห้อง<input id="cPass" maxlength="20" placeholder="อย่าใช้รหัสเดียวกับบัญชีสำคัญ"></label>
     <fieldset class="seg" id="cRange">
-      <legend>คลังตัวละคร (Top Anime ของ MyAnimeList)</legend>
+      <legend>คลังตัวละคร (อนิเมะยอดนิยมอันดับ…)</legend>
       <label><input type="radio" name="rng" value="1-50" checked><span>Top 1–50</span></label>
       <label><input type="radio" name="rng" value="1-500"><span>Top 1–500</span></label>
       <label><input type="radio" name="rng" value="1-1000"><span>Top 1–1000</span></label>
@@ -135,7 +135,7 @@
 <dialog id="dlgGuess">
   <form id="guessForm" method="dialog" class="dlg">
     <h3>ฉันคือ...</h3>
-    <label class="fld">ชื่อตัวละคร (อังกฤษ/โรมาจิ)<input id="guessIn" maxlength="60" autocomplete="off" placeholder="เช่น Gojo Satoru"></label>
+    <label class="fld">ชื่อตัวละคร (พิมพ์อังกฤษ/โรมาจิ แล้วเลือกจากรายชื่อ)<input id="guessIn" maxlength="60" autocomplete="off" placeholder="เช่น Gojo Satoru"></label>
     <div id="sugg" class="sugg"></div>
     <p class="note">เลือกจากรายชื่อหรือพิมพ์เองก็ได้ สลับชื่อ-นามสกุลหรือพิมพ์ผิดเล็กน้อยได้ เดาผิดจะเสียตา</p>
     <p id="guessErr" class="err"></p>

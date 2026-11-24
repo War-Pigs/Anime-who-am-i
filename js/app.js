@@ -1,5 +1,5 @@
 import { createNet } from './net.js';
-import { rollCharacters, searchCharacters, isCorrectGuess } from './jikan.js';
+import { loadData, rollCharacters, searchCharacters, isCorrectGuess } from './anime.js';
 
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -240,7 +240,7 @@ function renderGame() {
   const me = P[pid] || {}, myTurn = status === 'playing' && g.turn === pid;
   const tn = P[g.turn]?.name;
   const banner = $('#turnBanner');
-  if (status === 'rolling') banner.textContent = `กำลังสุ่มตัวละครจาก MyAnimeList… ${g.progress || 0}/${g.n || list.length}`;
+  if (status === 'rolling') banner.textContent = `กำลังแจกการ์ดตัวละคร… ${g.progress || 0}/${g.n || list.length}`;
   else if (status === 'ended') banner.textContent = 'จบเกมแล้ว! การ์ดทุกใบเปิดหมดแล้ว';
   else if (myTurn) banner.innerHTML = '<b>ตาของคุณ!</b> ถามลักษณะของตัวเองในแชท แล้วกดจบตาหรือขอเดา';
   else if (me.solved) banner.innerHTML = `คุณเดาถูกแล้ว! ตอนนี้ตาของ <b>${esc(tn)}</b> ช่วยชูป้ายตอบด้วยนะ`;
@@ -399,7 +399,7 @@ $('#endTurnBtn').addEventListener('click', () => {
 });
 $('#endGameBtn').addEventListener('click', async () => { if (amHost()) { await net.set(R('info/status'), 'ended'); sys('หัวห้องจบเกมแล้ว'); } });
 
-/* guess dialog with live MyAnimeList search */
+/* guess dialog with instant search over anime.json */
 let guessSel = null, searchT;
 $('#guessBtn').addEventListener('click', () => {
   guessSel = null; $('#guessIn').value = ''; $('#sugg').innerHTML = ''; $('#guessErr').textContent = '';
@@ -408,14 +408,14 @@ $('#guessBtn').addEventListener('click', () => {
 $('#guessIn').addEventListener('input', () => {
   guessSel = null; clearTimeout(searchT);
   const q = $('#guessIn').value.trim();
-  if (q.length < 3) { $('#sugg').innerHTML = ''; return; }
+  if (q.length < 2) { $('#sugg').innerHTML = ''; return; }
   searchT = setTimeout(async () => {
     try {
       const r = await searchCharacters(q);
       if ($('#guessIn').value.trim() !== q) return;
       $('#sugg').innerHTML = r.map(c => `<button type="button" data-id="${+c.id}" data-name="${esc(c.name)}">${safeUrl(c.img) ? `<img src="${esc(safeUrl(c.img))}" alt="">` : ''}<span>${esc(c.name)}${c.alt ? `<small>${esc(c.alt)}</small>` : ''}</span></button>`).join('');
     } catch { $('#sugg').innerHTML = '<p class="note">ค้นหาไม่ได้ตอนนี้ พิมพ์ชื่อเองได้เลย</p>'; }
-  }, 450);
+  }, 150);
 });
 $('#sugg').addEventListener('click', e => {
   const b = e.target.closest('button'); if (!b) return;
@@ -459,6 +459,7 @@ $('#againBtn').addEventListener('click', async () => {
 /* ---------- boot ---------- */
 (async () => {
   try { $('#nameIn').value = localStorage.getItem('agw-name') || ''; } catch {}
+  loadData().catch(e => toast(e.message));
   net = await createNet();
   $('#modeTag').textContent = net.mode === 'firebase' ? '● ออนไลน์' : 'โหมดทดลอง (ในเครื่องนี้)';
   if (net.mode !== 'firebase') $('#modeTag').title = 'ยังไม่ได้ตั้งค่า Firebase: เล่นได้เฉพาะหลายแท็บในเบราว์เซอร์เดียวกัน';

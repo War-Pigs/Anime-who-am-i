@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>สร้างไฟล์ข้อมูลตัวละคร</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Mitr:wght@400;500;600&display=swap">
+<style>
+:root{color-scheme:light dark;--bg:light-dark(#fff3f7,#191329);--panel:light-dark(#fff,#251c3d);--ink:light-dark(#33265c,#f3ecff);--soft:light-dark(#7a6a9e,#b9acd9);--line:light-dark(#f0dbe6,#3a2e5a);--pink:#ff6f9f}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.6 Mitr,system-ui,sans-serif}
+main{max-width:720px;margin:0 auto;padding:32px 18px}
+h1{font-size:30px;line-height:1.15;margin:0 0 8px;font-weight:600}
+.box{background:var(--panel);border:2px solid var(--line);border-radius:20px;padding:20px;margin-top:18px}
+label{display:grid;gap:4px;font-size:14px;color:var(--soft)}
+select{font:inherit;color:var(--ink);min-height:44px;padding:6px 10px;border-radius:12px;border:2px solid var(--line);background:var(--panel)}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:end;margin-top:14px}
+button,a.btn{font:inherit;font-weight:500;min-height:46px;padding:8px 20px;border-radius:12px;border:2px solid var(--pink);background:var(--pink);color:#fff;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center}
+button:disabled{opacity:.45;cursor:not-allowed}
+.bar{height:16px;border-radius:99px;background:var(--line);overflow:hidden;margin:16px 0 6px}
+.bar i{display:block;height:100%;width:0;background:var(--pink);transition:width .3s}
+#log{font-size:14px;color:var(--soft);max-height:220px;overflow:auto;white-space:pre-wrap;margin:8px 0 0}
+.ok{color:#2fb877;font-weight:500}.bad{color:#e5566b;font-weight:500}
+ol{padding-left:22px}
+</style>
+</head>
+<body>
+<main>
+  <h1>สร้างไฟล์ข้อมูลตัวละคร</h1>
+  <p>หน้านี้ดึงอนิเมะยอดนิยมจาก AniList พร้อมตัวละครและรูป แล้วรวมเป็นไฟล์ <b>anime.json</b> ให้เกมใช้สุ่มโดยไม่ต้องต่อเว็บอื่นตอนเล่น รันครั้งเดียว อยากอัปเดตเมื่อไหร่ค่อยรันใหม่</p>
+
+  <div class="box">
+    <div class="row">
+      <label>จำนวนอนิเมะ
+        <select id="count"><option value="1000" selected>Top 1–1000</option><option value="500">Top 1–500</option><option value="200">Top 1–200</option></select>
+      </label>
+      <button id="go">เริ่มดึงข้อมูล</button>
+      <a id="dl" class="btn" hidden>ดาวน์โหลด anime.json</a>
+    </div>
+    <div class="bar"><i id="bar"></i></div>
+    <div id="status">ยังไม่ได้เริ่ม ใช้เวลาประมาณ 2–4 นาที (AniList จำกัดจำนวนคำขอต่อนาที) ระหว่างนี้อย่าปิดหน้านี้</div>
+    <pre id="log"></pre>
+  </div>
+
+  <div class="box">
+    <b>เสร็จแล้วทำต่อ</b>
+    <ol>
+      <li>กด <b>ดาวน์โหลด anime.json</b></li>
+      <li>เข้า repository บน GitHub → <b>Add file → Upload files</b></li>
+      <li>ลากไฟล์ <b>anime.json</b> ลงไปตรงๆ (ให้อยู่ชั้นเดียวกับ index.html) → <b>Commit changes</b></li>
+      <li>รอ 1–2 นาที แล้วเปิดเกมใหม่ (Ctrl+F5)</li>
+    </ol>
+  </div>
+</main>
+<script>
+{
+const API = 'https://graphql.anilist.co';
+const Q = `query($page:Int,$per:Int,$cper:Int){Page(page:$page,perPage:$per){pageInfo{hasNextPage}
+ media(type:ANIME,sort:POPULARITY_DESC,isAdult:false){id idMal title{romaji english}
+ characters(perPage:$cper,sort:[ROLE,FAVOURITES_DESC]){edges{role node{id name{full alternative} image{large}}}}}}}`;
+const $ = s => document.querySelector(s);
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const log = (m, cls) => { const d = document.createElement('div'); d.textContent = m; if (cls) d.className = cls; $('#log').prepend(d); };
+let gap = 2200, last = 0;
+
+async function gql(vars) {
+  for (let attempt = 0; attempt < 8; attempt++) {
+    const w = last + gap - Date.now(); if (w > 0) await sleep(w);
+    last = Date.now();
+    let res;
+    try {
+      res = await fetch(API, { method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/json' }, body: JSON.stringify({ query: Q, variables: vars }) });
+    } catch (e) { log('เชื่อมต่อไม่ได้ ลองใหม่…'); await sleep(3000 * (attempt + 1)); continue; }
+    if (res.status === 429) {
+      const ra = +res.headers.get('Retry-After') || 60;
+      $('#status').textContent = `AniList ขอให้รอ ${ra} วินาที (ปกติ ไม่ต้องทำอะไร)…`;
+      gap = Math.min(gap + 500, 4000);
+      await sleep(ra * 1000 + 500); continue;
+    }
+    const j = await res.json().catch(() => null);
+    if (j && j.data && j.data.Page) return j.data.Page;
+    const msg = j?.errors?.map(e => e.message).join(', ') || ('HTTP ' + res.status);
+    if (/complex/i.test(msg)) throw Object.assign(new Error(msg), { complexity: true });
+    log('ผิดพลาด: ' + msg + ' ลองใหม่…'); await sleep(3000 * (attempt + 1));
+  }
+  throw new Error('AniList ไม่ตอบกลับ ลองกดเริ่มใหม่อีกครั้งภายหลัง');
+}
+
+$('#go').addEventListener('click', async () => {
+  const want = +$('#count').value;
+  $('#go').disabled = true; $('#dl').hidden = true; $('#log').textContent = '';
+  const anime = [], seenChar = new Set();
+  let page = 1, per = 50, cper = 12, skipped = 0;
+  try {
+    while (anime.length < want) {
+      $('#status').textContent = `กำลังดึงหน้า ${page}… ได้แล้ว ${anime.length}/${want} เรื่อง`;
+      let P;
+      try { P = await gql({ page, per, cper }); }
+      catch (e) {
+        if (e.complexity && per > 10) { const first = (page - 1) * per; per = Math.floor(per / 2); page = Math.floor(first / per) + 1; log(`ลดขนาดคำขอเหลือ ${per} เรื่องต่อหน้า`); continue; }
+        throw e;
+      }
+      for (const m of P.media || []) {
+        if (anime.length >= want) break;
+        const cast = [];
+        for (const e of m.characters?.edges || []) {
+          const n = e.node; if (!n?.id) continue;
+          const img = n.image?.large || '';
+          if (!img || /default\.jpg/.test(img)) continue;
+          const alt = (n.name?.alternative || []).filter(Boolean).slice(0, 3);
+          cast.push([n.id, n.name?.full || '', img, e.role === 'MAIN' ? 1 : 0, alt]);
+        }
+        const main = cast.filter(c => c[3]);
+        if (!main.length) { skipped++; continue; }
+        // Skip sequels/spin-offs whose main cast is already in the list (e.g. "Season 2").
+        const repeat = main.filter(c => seenChar.has(c[0])).length;
+        if (repeat / main.length >= 0.5) { skipped++; continue; }
+        cast.forEach(c => seenChar.add(c[0]));
+        anime.push({ id: m.id, mal: m.idMal || null, t: m.title?.english || m.title?.romaji || '?', c: cast });
+      }
+      $('#bar').style.width = Math.round(anime.length / want * 100) + '%';
+      log(`หน้า ${page}: รวม ${anime.length} เรื่อง (ข้ามภาคต่อ/ไม่มีตัวละคร ${skipped})`);
+      if (!P.pageInfo?.hasNextPage) break;
+      page++;
+    }
+    const data = { v: 1, source: 'AniList', sort: 'POPULARITY_DESC', built: new Date().toISOString().slice(0, 10), anime };
+    const blob = new Blob([JSON.stringify(data)], { type: 'application/json' });
+    const a = $('#dl'); a.href = URL.createObjectURL(blob); a.download = 'anime.json'; a.hidden = false;
+    const chars = anime.reduce((s, a) => s + a.c.length, 0);
+    $('#status').innerHTML = `<span class="ok">เสร็จแล้ว! ${anime.length} เรื่อง ตัวละคร ${chars} ตัว (${(blob.size / 1048576).toFixed(1)} MB)</span> กดดาวน์โหลดได้เลย`;
+    $('#bar').style.width = '100%';
+  } catch (e) {
+    $('#status').innerHTML = ''; const s = document.createElement('span'); s.className = 'bad'; s.textContent = e.message; $('#status').append(s);
+  }
+  $('#go').disabled = false;
+});
+}
+</script>
+</body>
+</html>
