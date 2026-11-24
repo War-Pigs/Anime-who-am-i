@@ -1,6 +1,6 @@
-import { createNet } from './net.js?v=7';
-import { loadData, poolSize, rollCharacters, searchAnime, animeByIds, searchCharacters, findCharacter, isCorrectGuess } from './anime.js?v=7';
-import { t, th, applyI18n, onLang, mountLangButtons } from './i18n.js?v=7';
+import { createNet } from './net.js?v=8';
+import { loadData, poolSize, rollCharacters, searchAnime, animeByIds, searchCharacters, findCharacter, isCorrectGuess } from './anime.js?v=8';
+import { t, th, applyI18n, onLang, mountLangButtons } from './i18n.js?v=8';
 
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -43,7 +43,7 @@ const say = (type, extra = {}) => net.push(R('chat'), { pid, name: myName(), typ
 // System lines are stored as a key + params so each viewer reads them in their own language.
 const sys = (k, p = {}) => net.push(R('chat'), { type: 'sys', k, p, ts: Date.now() });
 const picksOf = i => (i?.mode === 'pick' && i.picks ? String(i.picks).split(',').filter(Boolean) : []);
-const optsOf = i => ({ from: +i.from || 1, to: +i.to || 50, mainOnly: !!i.mainOnly, picks: picksOf(i) });
+const optsOf = i => ({ from: +i.from || 1, to: +i.to || 50, mainOnly: !!i.mainOnly, picks: picksOf(i), pickMode: i.mode === 'pick' });
 const poolText = i => (i.mode === 'pick' ? t('pickS', { n: i.pickCount ?? picksOf(i).length }) : t('topS', { a: i.from, b: i.to }));
 for (const d of document.querySelectorAll('dialog')) d.addEventListener('click', e => { if (e.target.closest('[data-close]')) d.close(); });
 
@@ -76,7 +76,7 @@ $('#searchForm').addEventListener('submit', e => {
 
 /* ---------- create / room settings dialog ---------- */
 const cf = $('#createForm');
-let dlgMode = 'create', pickIds = [], pickT;
+let dlgMode = 'create', pickIds = [], pickT, pickShown = 0, pickQ = null;
 function syncDialog() {
   $('#cPassWrap').hidden = dlgMode === 'edit' || cf.vis.value !== 'lock';
   const pick = cf.pmode.value === 'pick';
@@ -93,24 +93,35 @@ function dialogOpts() {
   let from = 1, to = 50;
   if (cf.rng.value === 'custom') { from = Math.max(1, +$('#cFrom').value | 0); to = Math.min(5000, +$('#cTo').value | 0); }
   else [from, to] = cf.rng.value.split('-').map(Number);
-  return { from, to, mainOnly: $('#cRole').value === 'main', picks: cf.pmode.value === 'pick' ? pickIds : [] };
+  const pickMode = cf.pmode.value === 'pick';
+  return { from, to, mainOnly: $('#cRole').value === 'main', picks: pickMode ? pickIds : [], pickMode };
 }
 async function renderChips() {
   const list = await animeByIds(pickIds).catch(() => []);
   $('#pickChips').innerHTML = list.map(a => `<span class="chipX"><span>${esc(a.title)}</span><button type="button" data-unpick="${esc(a.id)}" aria-label="${esc(t('pickRemove', { t: a.title }))}">✕</button></span>`).join('');
   syncDialog();
 }
-async function renderPickList() {
+// Shows search results 50 at a time; "show more" appends the next 50 without rebuilding the list.
+const PAGE = 50;
+async function renderPickList(more = false) {
   const q = $('#pickSearch').value.trim();
-  let list;
-  try { list = await searchAnime(q); } catch (e) { $('#pickList').innerHTML = `<p class="note">${esc(errText(e))}</p>`; return; }
+  if (!more || q !== pickQ) { pickShown = 0; pickQ = q; }
+  let res;
+  try { res = await searchAnime(q, pickShown, PAGE); } catch (e) { $('#pickList').innerHTML = `<p class="note">${esc(errText(e))}</p>`; return; }
   if ($('#pickSearch').value.trim() !== q) return;
   const on = new Set(pickIds.map(String));
-  $('#pickList').innerHTML = list.length ? list.map(a => `<button type="button" data-pick="${esc(a.id)}" class="${on.has(String(a.id)) ? 'on' : ''}">${safeUrl(a.img) ? `<img src="${esc(safeUrl(a.img))}" alt="">` : ''}<span>${esc(a.title)}<small>${esc(t('pickMeta', { rank: a.rank, m: a.main, a: a.all }))}${a.romaji ? ' · ' + esc(a.romaji) : ''}</small></span></button>`).join('')
-    : `<p class="note">${esc(t('pickNone'))}</p>`;
+  const rows = res.items.map(a => `<button type="button" data-pick="${esc(a.id)}" class="${on.has(String(a.id)) ? 'on' : ''}">${safeUrl(a.img) ? `<img src="${esc(safeUrl(a.img))}" alt="" loading="lazy">` : ''}<span>${esc(a.title)}<small>${esc(t('pickMeta', { rank: a.rank, m: a.main, a: a.all }))}${a.romaji ? ' · ' + esc(a.romaji) : ''}</small></span></button>`).join('');
+  const list = $('#pickList');
+  list.querySelector('.moreBtn')?.remove();
+  if (pickShown === 0) list.innerHTML = res.total ? rows : `<p class="note">${esc(t('pickNone'))}</p>`;
+  else list.insertAdjacentHTML('beforeend', rows);
+  pickShown += res.items.length;
+  const left = res.total - pickShown;
+  if (left > 0) list.insertAdjacentHTML('beforeend', `<button type="button" class="moreBtn">${esc(t('showMore', { n: left }))}</button>`);
 }
 $('#pickSearch').addEventListener('input', () => { clearTimeout(pickT); pickT = setTimeout(renderPickList, 120); });
 $('#pickList').addEventListener('click', e => {
+  if (e.target.closest('.moreBtn')) { renderPickList(true); return; }
   const b = e.target.closest('[data-pick]'); if (!b) return;
   const id = b.dataset.pick, i = pickIds.indexOf(id);
   if (i >= 0) pickIds.splice(i, 1);
@@ -121,10 +132,12 @@ $('#pickList').addEventListener('click', e => {
 });
 $('#pickChips').addEventListener('click', e => {
   const b = e.target.closest('[data-unpick]'); if (!b) return;
-  pickIds = pickIds.filter(x => x !== b.dataset.unpick);
-  renderChips(); renderPickList();
+  const id = b.dataset.unpick;
+  pickIds = pickIds.filter(x => x !== id);
+  $('#pickList').querySelector(`[data-pick="${CSS.escape(id)}"]`)?.classList.remove('on');
+  renderChips();
 });
-$('#pickClear').addEventListener('click', () => { pickIds = []; renderChips(); renderPickList(); });
+$('#pickClear').addEventListener('click', () => { pickIds = []; $('#pickList').querySelectorAll('.on').forEach(b => b.classList.remove('on')); renderChips(); });
 cf.addEventListener('change', syncDialog);
 cf.addEventListener('input', e => { if (e.target.matches('#cFrom,#cTo')) syncDialog(); });
 
@@ -134,7 +147,7 @@ function openDialog(mode) {
   const i = mode === 'edit' ? st.info : null;
   if (i) {
     cf.pmode.value = i.mode === 'pick' ? 'pick' : 'top';
-    const preset = ['1-50', '1-500', '1-1000'].includes(`${i.from}-${i.to}`) ? `${i.from}-${i.to}` : 'custom';
+    const preset = ['1-50', '1-500', '1-1000', '1-3000'].includes(`${i.from}-${i.to}`) ? `${i.from}-${i.to}` : 'custom';
     cf.rng.value = preset; $('#cFrom').value = i.from; $('#cTo').value = i.to;
     $('#cMax').value = String(i.max); $('#cRole').value = i.mainOnly ? 'main' : 'all';
     pickIds = picksOf(i);

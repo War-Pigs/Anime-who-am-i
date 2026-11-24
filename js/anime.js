@@ -26,6 +26,7 @@ const toChar = (c, a) => ({ id: c[0], name: c[1], raw: c[1], img: c[2], alt: (c[
 
 // The list of anime a room draws from: a rank range, or the picked anime ids.
 function poolAnime(anime, opts) {
+  if (opts.pickMode && !(opts.picks && opts.picks.length)) return [];
   if (opts.picks && opts.picks.length) { const s = new Set(opts.picks.map(String)); return anime.filter(a => s.has(String(a.id))); }
   const lo = Math.max(1, opts.from), hi = Math.min(anime.length, opts.to);
   if (hi < lo) throw fail('eRange', { n: anime.length });
@@ -69,18 +70,18 @@ const animeCard = a => {
   const main = (a.c || []).filter(c => c[3]);
   return { id: a.id, title: a.t, romaji: a.r || '', rank: a.rank, img: (main[0] || a.c?.[0] || [])[2] || '', main: main.length, all: (a.c || []).length };
 };
-// Title search for the room settings. Empty query lists the most popular titles.
-export async function searchAnime(q, limit = 30) {
+// Title search for the room settings, paged: returns { items, total }. Empty query lists every title by popularity.
+export async function searchAnime(q, offset = 0, limit = 50) {
   const { anime } = await loadData();
   const words = norm(q);
-  if (!words.length) return anime.slice(0, limit).map(animeCard);
+  if (!words.length) return { items: anime.slice(offset, offset + limit).map(animeCard), total: anime.length };
   const hits = [];
   for (const a of anime) {
     const keys = [a.t, a.r].filter(Boolean).map(s => norm(s).join(' '));
     if (keys.some(k => wordsMatch(words, k))) hits.push([keys.some(k => k.startsWith(words.join(' '))) ? 0 : 1, a]);
   }
   hits.sort((x, y) => x[0] - y[0] || x[1].rank - y[1].rank);
-  return hits.slice(0, limit).map(([, a]) => animeCard(a));
+  return { items: hits.slice(offset, offset + limit).map(([, a]) => animeCard(a)), total: hits.length };
 }
 // Titles for a list of picked ids (for chips and the room's pool list).
 export async function animeByIds(ids) {

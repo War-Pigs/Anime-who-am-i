@@ -175,3 +175,4 @@ html[lang=ja] body{font-family:"M PLUS Rounded 1c",Mitr,system-ui,sans-serif}
 .poolBox li{border:2px solid var(--line);border-radius:999px;padding:1px 10px;background:var(--panel)}
 dialog{width:min(560px,calc(100vw - 24px))}
 @media(max-width:600px){.mode{display:none}}
+.pickList .moreBtn{justify-content:center;font-weight:500;color:var(--pink);border-style:dashed;background:var(--panel)}

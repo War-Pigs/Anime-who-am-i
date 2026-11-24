@@ -35,7 +35,7 @@ html[lang=ja] body{font-family:"M PLUS Rounded 1c",Mitr,system-ui,sans-serif}
   <div class="box">
     <div class="row">
       <label><span data-i18n="b_count"></span>
-        <select id="count"><option value="1000" selected>Top 1–1000</option><option value="500">Top 1–500</option><option value="200">Top 1–200</option></select>
+        <select id="count"><option value="3000">Top 1–3000</option><option value="2000">Top 1–2000</option><option value="1000" selected>Top 1–1000</option><option value="500">Top 1–500</option><option value="200">Top 1–200</option></select>
       </label>
       <button id="go" data-i18n="b_go"></button>
       <a id="dl" class="btn" hidden data-i18n="b_dl"></a>
@@ -51,7 +51,7 @@ html[lang=ja] body{font-family:"M PLUS Rounded 1c",Mitr,system-ui,sans-serif}
   </div>
 </main>
 <script type="module">
-import { t, applyI18n, mountLangButtons, onLang } from '../js/i18n.js?v=7';
+import { t, applyI18n, mountLangButtons, onLang } from '../js/i18n.js?v=8';
 mountLangButtons(document.querySelector('#langs')); applyI18n();
 let doneMsg = null; document.title = t('b_title');
 onLang(() => { document.title = t('b_title'); if (doneMsg) document.querySelector('#status').innerHTML = `<span class="ok">${t('b_done', doneMsg)}</span>`; });
@@ -92,6 +92,13 @@ async function gql(vars) {
   throw new Error(t('b_noreply'));
 }
 
+function offer(anime) {
+  const data = { v: 2, source: 'AniList', sort: 'POPULARITY_DESC', built: new Date().toISOString().slice(0, 10), ip: IP, anime };
+  const blob = new Blob([JSON.stringify(data)], { type: 'application/json' });
+  const a = $('#dl'); if (a.href) URL.revokeObjectURL(a.href);
+  a.href = URL.createObjectURL(blob); a.download = 'anime.json'; a.hidden = false; a.textContent = t('b_dl');
+  return blob;
+}
 $('#go').addEventListener('click', async () => {
   const want = +$('#count').value;
   $('#go').disabled = true; $('#dl').hidden = true; $('#log').textContent = ''; doneMsg = null;
@@ -136,15 +143,17 @@ $('#go').addEventListener('click', async () => {
       if (!P.pageInfo?.hasNextPage) break;
       page++;
     }
-    const data = { v: 2, source: 'AniList', sort: 'POPULARITY_DESC', built: new Date().toISOString().slice(0, 10), ip: IP, anime };
-    const blob = new Blob([JSON.stringify(data)], { type: 'application/json' });
-    const a = $('#dl'); a.href = URL.createObjectURL(blob); a.download = 'anime.json'; a.hidden = false;
+    const blob = offer(anime);
     const chars = anime.reduce((s, a) => s + a.c.length, 0);
     doneMsg = { n: anime.length, c: chars, mb: (blob.size / 1048576).toFixed(1) };
     $('#status').innerHTML = `<span class="ok">${t('b_done', doneMsg)}</span>`;
     $('#bar').style.width = '100%';
   } catch (e) {
-    $('#status').innerHTML = ''; const s = document.createElement('span'); s.className = 'bad'; s.textContent = e.message; $('#status').append(s);
+    $('#status').innerHTML = ''; const s = document.createElement('span'); s.className = 'bad';
+    // Keep what was already fetched: a long 3000-anime run should not be lost to one late failure.
+    if (anime.length) { offer(anime); $('#dl').textContent = t('b_dlPart', { n: anime.length }); s.textContent = t('b_partial', { m: e.message, n: anime.length }); }
+    else s.textContent = e.message;
+    $('#status').append(s);
   }
   $('#go').disabled = false;
 });
