@@ -110,22 +110,29 @@ async function getIndex() {
 }
 const out = (e, title) => ({ id: e.id, name: e.name, img: e.img, anime: title || e.anime, alt: title || e.anime });
 
-// Instant autocomplete: characters whose name matches come first, then the cast of anime whose title matches.
-export async function searchCharacters(q, limit = 20) {
-  const words = norm(q); if (!words.length) return [];
-  const { chars, titles } = await getIndex(), hits = [];
+// Instant autocomplete, paged: returns { items, total }.
+// Characters whose name matches come first; then, for every anime whose title matches, its WHOLE cast as a group
+// (main characters first), so typing a title always lists everyone from that show. `exclude` hides ids (wrong guesses).
+export async function searchCharacters(q, { offset = 0, limit = 30, exclude = null } = {}) {
+  const words = norm(q); if (!words.length) return { items: [], total: 0 };
+  const { chars, titles } = await getIndex();
+  const keep = e => !exclude || !exclude.has(e.id);
+  const groups = titles.filter(t => t.keys.some(k => wordsMatch(words, k)));
+  const inGroup = new Set(groups.flatMap(t => t.cast.map(e => e.id)));
+  const hits = [];
   for (const e of chars) {
+    if (inGroup.has(e.id) || !keep(e)) continue;
     const k = e.keys.find(k => wordsMatch(words, k));
     if (k !== undefined) hits.push([k.startsWith(words[0]) ? 0 : 1, e]);
   }
   hits.sort((a, b) => a[0] - b[0] || a[1].rank - b[1].rank);
-  const res = hits.slice(0, limit).map(([, e]) => out(e)), have = new Set(res.map(r => r.id));
-  for (const t of titles) {
-    if (res.length >= limit) break;
-    if (!t.keys.some(k => wordsMatch(words, k))) continue;
-    for (const e of t.cast) { if (res.length >= limit) break; if (!have.has(e.id)) { have.add(e.id); res.push(out(e, t.title)); } }
+  const flat = hits.map(([, e]) => out(e));
+  const shown = new Set();
+  for (const t of groups) {
+    const cast = t.cast.filter(e => keep(e) && !shown.has(e.id));
+    cast.forEach(e => { shown.add(e.id); flat.push({ ...out(e, t.title), group: t.title, groupCount: cast.length }); });
   }
-  return res;
+  return { items: flat.slice(offset, offset + limit), total: flat.length };
 }
 
 function lev(a, b) {
@@ -149,7 +156,7 @@ export async function findCharacter(text) {
     if (d < bestD || (d === bestD && e.rank < best.rank)) { best = e; bestD = d; }
   }
   if (best && bestD <= Math.max(1, Math.floor(gs.length * 0.2))) return out(best);
-  const pre = (await searchCharacters(text, 1))[0];
+  const pre = (await searchCharacters(text, { limit: 1 })).items[0];
   return pre && chars.find(c => c.id === pre.id && c.keys.some(k => wordsMatch(g, k))) ? pre : null;
 }
 

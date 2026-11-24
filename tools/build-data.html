@@ -51,7 +51,7 @@ html[lang=ja] body{font-family:"M PLUS Rounded 1c",Mitr,system-ui,sans-serif}
   </div>
 </main>
 <script type="module">
-import { t, applyI18n, mountLangButtons, onLang } from '../js/i18n.js?v=9';
+import { t, applyI18n, mountLangButtons, onLang } from '../js/i18n.js?v=10';
 mountLangButtons(document.querySelector('#langs')); applyI18n();
 let doneMsg = null; document.title = t('b_title');
 onLang(() => { document.title = t('b_title'); if (doneMsg) document.querySelector('#status').innerHTML = `<span class="ok">${t('b_done', doneMsg)}</span>`; });

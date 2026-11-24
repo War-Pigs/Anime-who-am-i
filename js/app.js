@@ -1,6 +1,6 @@
-import { createNet } from './net.js?v=9';
-import { loadData, poolSize, rollCharacters, searchAnime, animeByIds, searchCharacters, findCharacter, isCorrectGuess } from './anime.js?v=9';
-import { t, th, applyI18n, onLang, mountLangButtons } from './i18n.js?v=9';
+import { createNet } from './net.js?v=10';
+import { loadData, poolSize, rollCharacters, searchAnime, animeByIds, searchCharacters, findCharacter, isCorrectGuess } from './anime.js?v=10';
+import { t, th, applyI18n, onLang, mountLangButtons } from './i18n.js?v=10';
 
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -513,29 +513,59 @@ $('#endTurnBtn').addEventListener('click', () => {
 $('#endGameBtn').addEventListener('click', async () => { if (amHost()) { await net.set(R('info/status'), 'ended'); sys('sHostEnded'); } });
 
 /* guess dialog with instant search over anime.json */
-let guessSel = null, searchT, suggs = [];
+// My wrong guesses this game, read back from the room chat (so they survive a reload and reset with a new game).
+function myWrongGuesses() {
+  const ids = new Set(), names = new Set();
+  for (const m of Object.values(st.chat || {})) {
+    if (!m || m.type !== 'guess' || m.pid !== pid || m.ok) continue;
+    if (m.gid != null) ids.add(+m.gid);
+    if (m.text) names.add(String(m.text).toLowerCase());
+  }
+  return { ids, names };
+}
+const GPAGE = 30;
+let guessSel = null, searchT, suggs = [], guessShown = 0, guessQ = null;
 $('#guessBtn').addEventListener('click', () => {
-  guessSel = null; $('#guessIn').value = ''; $('#sugg').innerHTML = ''; $('#guessErr').textContent = '';
+  guessSel = null; suggs = []; $('#guessIn').value = ''; $('#sugg').innerHTML = ''; $('#guessErr').textContent = '';
   $('#dlgGuess').showModal(); $('#guessIn').focus();
 });
+function suggRow(c) {
+  return `<button type="button" data-id="${+c.id}" data-name="${esc(c.name)}">${safeUrl(c.img) ? `<img src="${esc(safeUrl(c.img))}" alt="" loading="lazy">` : ''}<span>${esc(c.name)}${c.alt ? `<small>${esc(c.alt)}</small>` : ''}</span></button>`;
+}
+async function renderSugg(more = false) {
+  const q = $('#guessIn').value.trim(), box = $('#sugg');
+  if (!more || q !== guessQ) { guessShown = 0; guessQ = q; suggs = []; }
+  if (q.length < 2) { box.innerHTML = ''; return; }
+  let res;
+  try { res = await searchCharacters(q, { offset: guessShown, limit: GPAGE, exclude: myWrongGuesses().ids }); }
+  catch { box.innerHTML = `<p class="note">${esc(t('searchFail'))}</p>`; return; }
+  if ($('#guessIn').value.trim() !== q) return;
+  let prev = guessShown ? suggs[suggs.length - 1]?.group ?? null : undefined, html = '';
+  for (const c of res.items) {
+    const g = c.group ?? null;
+    if (g !== prev) {
+      if (g) html += `<div class="sgHead">${esc(t('sgGroup', { t: g, n: c.groupCount }))}</div>`;
+      else if (res.items.some(x => x.group)) html += `<div class="sgHead">${esc(t('sgNames'))}</div>`;
+      prev = g;
+    }
+    html += suggRow(c);
+  }
+  box.querySelector('.moreBtn')?.remove();
+  if (!guessShown) box.innerHTML = res.total ? html : `<p class="note">${esc(t('notInList'))}</p>`;
+  else box.insertAdjacentHTML('beforeend', html);
+  suggs.push(...res.items); guessShown += res.items.length;
+  const left = res.total - guessShown;
+  if (left > 0) box.insertAdjacentHTML('beforeend', `<button type="button" class="moreBtn">${esc(t('showMoreC', { n: left }))}</button>`);
+}
 $('#guessIn').addEventListener('input', () => {
-  guessSel = null; clearTimeout(searchT);
-  const q = $('#guessIn').value.trim();
-  if (q.length < 2) { $('#sugg').innerHTML = ''; return; }
-  searchT = setTimeout(async () => {
-    try {
-      const r = await searchCharacters(q);
-      if ($('#guessIn').value.trim() !== q) return;
-      suggs = r;
-      $('#sugg').innerHTML = (r.length ? '' : `<p class="note">${esc(t('notInList'))}</p>`) +
-        r.map(c => `<button type="button" data-id="${+c.id}" data-name="${esc(c.name)}">${safeUrl(c.img) ? `<img src="${esc(safeUrl(c.img))}" alt="">` : ''}<span>${esc(c.name)}${c.alt ? `<small>${esc(c.alt)}</small>` : ''}</span></button>`).join('');
-    } catch { $('#sugg').innerHTML = `<p class="note">${esc(t('searchFail'))}</p>`; }
-  }, 150);
+  guessSel = null; $('#guessErr').textContent = ''; clearTimeout(searchT);
+  searchT = setTimeout(() => renderSugg(false), 150);
 });
 $('#sugg').addEventListener('click', e => {
-  const b = e.target.closest('button'); if (!b) return;
+  if (e.target.closest('.moreBtn')) { renderSugg(true); return; }
+  const b = e.target.closest('button[data-id]'); if (!b) return;
   guessSel = suggs.find(c => +c.id === +b.dataset.id) || null; $('#guessIn').value = b.dataset.name;
-  $('#sugg').querySelectorAll('button').forEach(x => x.classList.toggle('sel', x === b));
+  $('#sugg').querySelectorAll('button[data-id]').forEach(x => x.classList.toggle('sel', x === b));
 });
 $('#guessForm').addEventListener('submit', async e => {
   e.preventDefault();
@@ -543,13 +573,18 @@ $('#guessForm').addEventListener('submit', async e => {
   if (!text) { $('#guessErr').textContent = t('guessEmpty'); return; }
   const me = st.players[pid], g = st.game;
   if (!me?.char || g?.turn !== pid || st.info.status !== 'playing') { $('#dlgGuess').close(); return; }
-  $('#dlgGuess').close();
   const pick = guessSel && guessSel.name === text ? guessSel : null;
   const ok = isCorrectGuess(text, pick?.id, me.char);
-  let gx = ok ? { name: me.char.name, img: me.char.img || '', anime: me.char.anime || '' } : pick;
+  let gx = ok ? { id: me.char.id, name: me.char.name, img: me.char.img || '', anime: me.char.anime || '' } : pick;
   if (!gx) { try { gx = await findCharacter(text); } catch {} }
+  if (!ok) {   // same wrong answer twice: warn, keep the dialog open, don't spend the turn
+    const w = myWrongGuesses();
+    if ((gx && w.ids.has(+gx.id)) || w.names.has((gx?.name || text).toLowerCase())) { $('#guessErr').textContent = t('alreadyGuessed', { name: gx?.name || text }); return; }
+  }
+  $('#dlgGuess').close();
+  const gid = gx?.id != null && Number.isFinite(+gx.id) ? +gx.id : null;
   gx = gx ? { name: String(gx.name).slice(0, 60), img: safeUrl(gx.img), anime: String(gx.anime || '').slice(0, 80) } : { name: text.slice(0, 60), img: '', anime: '' };
-  await say('guess', { text: gx.name, ok, img: gx.img, ganime: gx.anime });
+  await say('guess', { text: gx.name, ok, img: gx.img, ganime: gx.anime, gid });
   if (ok) {
     const place = await net.tx(R('game/solved'), c => (c || 0) + 1);
     await net.set(R(`players/${pid}/rx`), { t: 'happy', ts: Date.now(), g: gx });
