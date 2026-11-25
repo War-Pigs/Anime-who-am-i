@@ -178,3 +178,5 @@ dialog{width:min(560px,calc(100vw - 24px))}
 .pickList .moreBtn{justify-content:center;font-weight:500;color:var(--pink);border-style:dashed;background:var(--panel)}
 .sugg .sgHead{position:sticky;top:0;z-index:1;background:var(--panel);font-size:13px;font-weight:600;color:var(--grape);padding:6px 4px 2px}
 .sugg .moreBtn{justify-content:center;font-weight:500;color:var(--pink);border-style:dashed;background:var(--panel)}
+.endBtns{align-items:center;justify-content:flex-end;width:100%}
+.endBtns .note{margin:0 auto 0 0}

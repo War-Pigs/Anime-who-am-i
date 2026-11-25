@@ -6,8 +6,8 @@
 <title>Anime Guess Who I Am</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Mitr:wght@400;500;600&family=M+PLUS+Rounded+1c:wght@400;500;700&display=swap">
-<link rel="stylesheet" href="style.css?v=10">
-<script src="config.js?v=10"></script>
+<link rel="stylesheet" href="style.css?v=11">
+<script src="config.js?v=11"></script>
 </head>
 <body>
 <header class="top">
@@ -70,15 +70,20 @@
         <div id="turnBanner" class="turnBanner"></div>
         <div id="stage" class="stage"></div>
         <div class="actions">
-          <div class="reacts">
+          <div class="reacts" id="reactsBox">
             <button class="rx yes" data-rx="yes" data-i18n-aria="yes">✓<span data-i18n="yes"></span></button>
             <button class="rx no" data-rx="no" data-i18n-aria="no">✗<span data-i18n="no"></span></button>
             <button class="rx maybe" data-rx="maybe" data-i18n-aria="maybe">?<span data-i18n="maybe"></span></button>
           </div>
-          <div class="turnBtns">
+          <div class="turnBtns" id="turnBtnsBox">
             <button id="guessBtn" class="btn primary" data-i18n="guess"></button>
             <button id="endTurnBtn" class="btn"></button>
             <button id="endGameBtn" class="btn ghost" data-i18n="endGame" hidden></button>
+          </div>
+          <div class="turnBtns endBtns" id="endBtns" hidden>
+            <span id="endNote" class="note"></span>
+            <button id="viewResBtn" class="btn" data-i18n="viewResults"></button>
+            <button id="again2Btn" class="btn primary" data-i18n="againBig"></button>
           </div>
         </div>
       </div>
@@ -173,6 +178,6 @@
 </dialog>
 
 <div id="toast" class="toast" role="status"></div>
-<script type="module" src="js/app.js?v=10"></script>
+<script type="module" src="js/app.js?v=11"></script>
 </body>
 </html>

@@ -1,6 +1,6 @@
-import { createNet } from './net.js?v=10';
-import { loadData, poolSize, rollCharacters, searchAnime, animeByIds, searchCharacters, findCharacter, isCorrectGuess } from './anime.js?v=10';
-import { t, th, applyI18n, onLang, mountLangButtons } from './i18n.js?v=10';
+import { createNet } from './net.js?v=11';
+import { loadData, poolSize, rollCharacters, searchAnime, animeByIds, searchCharacters, findCharacter, isCorrectGuess } from './anime.js?v=11';
+import { t, th, applyI18n, onLang, mountLangButtons } from './i18n.js?v=11';
 
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -344,7 +344,10 @@ function renderGame() {
   const tn = P[g.turn]?.name;
   const banner = $('#turnBanner');
   if (status === 'rolling') banner.textContent = t('dealing', { p: g.progress || 0, n: g.n || list.length });
-  else if (status === 'ended') banner.textContent = t('ended');
+  else if (status === 'ended') {
+    const win = Object.values(P).find(p => p?.solved && +p.place === 1);
+    banner.textContent = win ? t('endedWin', { name: win.name }) : t('ended');
+  }
   else if (myTurn) banner.innerHTML = t('myTurn');
   else if (me.solved) banner.innerHTML = th('solvedWatch', { name: tn }, esc);
   else banner.innerHTML = tn ? th('otherTurn', { name: tn }, esc) : '';
@@ -353,6 +356,10 @@ function renderGame() {
   $('#endTurnBtn').textContent = t(myTurn || !amHost() ? 'endTurn' : 'skipTurn');
   $('#endGameBtn').hidden = !(amHost() && status === 'playing');
   document.querySelectorAll('.rx').forEach(b => { b.disabled = status !== 'playing'; });
+  const ended = status === 'ended';   // after the game: replay / results instead of turn controls
+  $('#reactsBox').hidden = ended; $('#turnBtnsBox').hidden = ended; $('#endBtns').hidden = !ended;
+  $('#again2Btn').hidden = !amHost();
+  $('#endNote').textContent = amHost() ? '' : t('waitAgain');
 }
 
 /* ---------- stage of chibis ---------- */
@@ -603,12 +610,15 @@ function showResults() {
   $('#againBtn').hidden = !amHost();
   if (!$('#dlgResult').open) $('#dlgResult').showModal();
 }
-$('#againBtn').addEventListener('click', async () => {
+async function playAgain() {
   if (!amHost()) return;
   const upd = { 'info/status': 'lobby', game: null, chat: null };
   for (const k of Object.keys(st.players)) Object.assign(upd, { [`players/${k}/char`]: null, [`players/${k}/solved`]: null, [`players/${k}/place`]: null, [`players/${k}/turns`]: null, [`players/${k}/rx`]: null });
   await net.update(`rooms/${st.code}`, upd);
-});
+}
+$('#againBtn').addEventListener('click', playAgain);
+$('#again2Btn').addEventListener('click', playAgain);
+$('#viewResBtn').addEventListener('click', () => { if (st.info?.status === 'ended') showResults(); });
 
 /* ---------- language ---------- */
 function setModeTag() {
